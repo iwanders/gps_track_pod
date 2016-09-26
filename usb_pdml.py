@@ -142,11 +142,15 @@ class USBPDML():
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
     conversation.parse_file()
+    start_time = None
     for comm in conversation.interaction():
         customstring = ""
+        if (start_time == None):
+            start_time = comm["time"]
         if ("usb.bString" in comm):
             customstring = comm["usb.bString"]
         if ("data" in comm):
             customstring = " ".join(["{:0>2X}".format(d) for d in comm["data"]])
-        print("{time: >.5f} {endpoint: >2d} {direction: >3s} {type: >12s} {addition}".format(addition=customstring, **comm))
+        t = comm["time"] - start_time
+        print("{t: >8.3f} {endpoint: >2d} {direction: >3s} {stype} {addition}".format(t=t,stype=comm["type"][0:3], addition=customstring, **comm))
         #print(comm)
