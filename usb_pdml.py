@@ -23,6 +23,7 @@ class USBPacket():
         "usb.endpoint_number": lambda x: int(x, 16),
         "num": lambda x: int(x, 16),
         "len": lambda x: int(x, 16),
+        "frame.time_epoch": lambda x: float(x),
         "caplen": lambda x: int(x, 16),
         "usb.transfer_type": lambda x: int(x,16),
         "usb.urb_id": lambda x: int(x,16),
@@ -32,6 +33,7 @@ class USBPacket():
         "usb.endpoint_number.direction": lambda x: int(x),
         "usb.endpoint_number.endpoint": lambda x: int(x),
         "usb.capdata": lambda x: [int(c,16) for c in [x[i:i + 2] for i in range(0, len(x), 2)]],
+        "usb.bString": lambda z: "".join([chr(int(c[2:4] + c[0:2],16)) for c in [z[i:i+4] for i in range(0, len(z), 4)]])
         
     }
 
@@ -60,14 +62,23 @@ class USBPacket():
     def __getitem__(self, name):
         return self.d[name]
 
-    def __str__(self):
-        return "<{} - {} {}>".format("INTERRUPT" if self["usb.transfer_type"] == USB_TRANSFER_INTERRUPT else "CONTROL",
-                                        self["usb.endpoint_number"],
-                                        "IN" if self["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN else "OUT")
+    def __contains__(self, item):
+        return item in self.d
+
+    def pp(self):
+        k = self.d.keys()
+        ks = sorted(k)
+        representation = ""
+        for k in ks:
+            representation += " "*k.count(".") + "{}: {} ({})\n".format(k, self.d[k], self.s[k] if k in self.s else "")
+        return representation
+
 
 class USBPDML():
     def __init__(self, path):
         self.path = path
+        self.interactions = []
+        self.interactions_full = {}
 
     def parse_file(self):
         tree = ET.parse(self.path)
@@ -89,21 +100,53 @@ class USBPDML():
                     self.usb_transaction(submit, completed)
                     del current_urbs[urb_id]
 
+    def add_comm(self, packet):
+        summary = {}
+        self.interactions_full[packet["num"]] = packet
+        summary["type"] = "interrupt" if packet["usb.transfer_type"] == USB_TRANSFER_INTERRUPT else "control"
+        summary["direction"] = "in" if packet["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN else "out"
+        summary["endpoint"] = packet["usb.endpoint_number.endpoint"]
+        summary["num"] = packet["num"]
+        summary["time"] = packet["frame.time_epoch"]
+        if "usb.capdata" in packet:
+            summary["data"] = packet["usb.capdata"]
+        if "usb.bString" in packet:
+            summary["usb.bString"] = packet["usb.bString"]
+        self.interactions.append(summary)
+
     def usb_transaction(self, submit, completed):
         if (completed["usb.urb_status"] != URB_STATUS_SUCCESS):
             print("Failure in USB transmission!")
         if (completed["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN):
             # the completed one is the relevant data.
-            print("Incoming: {}".format(completed))
-            if (completed["usb.transfer_type"] == USB_TRANSFER_CONTROL):
-                print(completed.d)
+            #print("Incoming: {}".format(completed))
+            self.add_comm(completed)
         else:
             # the submit one has the relevant data.
-            print("Outgoing: {}".format(submit))
+            #print("Outgoing: {}".format(submit))
+            self.add_comm(submit)
+            #print(submit.pp())
         # print(submit)
         # print(completed)
-        print("\n"*4)
+        #print("\n"*4)
+
+    def interaction(self):
+        return self.interactions
+
+    def get_full(self, num):
+        if (type(num) == int):
+            return self.interactions_full[num]
+        if (type(num) == dict):
+            return self.interactions_full[num["num"]]
 
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
     conversation.parse_file()
+    for comm in conversation.interaction():
+        customstring = ""
+        if ("usb.bString" in comm):
+            customstring = comm["usb.bString"]
+        if ("data" in comm):
+            customstring = " ".join(["{:0>2X}".format(d) for d in comm["data"]])
+        print("{time: >.5f} {endpoint: >2d} {direction: >3s} {type: >12s} {addition}".format(addition=customstring, **comm))
+        #print(comm)
