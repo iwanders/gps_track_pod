@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import xml.etree.ElementTree as ET
+import gzip
 import sys
 
 URB_TYPE_SUBMIT = 83
@@ -81,7 +82,12 @@ class USBPDML():
         self.interactions_full = {}
 
     def parse_file(self):
-        tree = ET.parse(self.path)
+        if self.path.endswith("gz"):
+            f = gzip.GzipFile(self.path)
+        else:
+            f = open(self.path)
+        tree = ET.parse(f)
+        f.close()
         root = tree.getroot()
         current_urbs = {}
         for child in root:
@@ -119,16 +125,10 @@ class USBPDML():
             print("Failure in USB transmission!")
         if (completed["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN):
             # the completed one is the relevant data.
-            #print("Incoming: {}".format(completed))
             self.add_comm(completed)
         else:
             # the submit one has the relevant data.
-            #print("Outgoing: {}".format(submit))
             self.add_comm(submit)
-            #print(submit.pp())
-        # print(submit)
-        # print(completed)
-        #print("\n"*4)
 
     def interaction(self):
         return self.interactions
@@ -139,18 +139,23 @@ class USBPDML():
         if (type(num) == dict):
             return self.interactions_full[num["num"]]
 
+    def stringify_msg(self, msg):
+        customstring = ""
+        if ("usb.bString" in msg):
+            customstring = msg["usb.bString"]
+        if ("data" in msg):
+            customstring = " ".join(["{:0>2X}".format(d) for d in msg["data"]])
+        return "{endpoint: >2d} {direction: >3s} {stype} {addition}".format(stype=msg["type"][0:3], addition=customstring, **msg)
+        
+
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
     conversation.parse_file()
     start_time = None
-    for comm in conversation.interaction():
+    for msg in conversation.interaction():
         customstring = ""
         if (start_time == None):
-            start_time = comm["time"]
-        if ("usb.bString" in comm):
-            customstring = comm["usb.bString"]
-        if ("data" in comm):
-            customstring = " ".join(["{:0>2X}".format(d) for d in comm["data"]])
-        t = comm["time"] - start_time
-        print("{t: >8.3f} {endpoint: >2d} {direction: >3s} {stype} {addition}".format(t=t,stype=comm["type"][0:3], addition=customstring, **comm))
+            start_time = msg["time"]
         #print(comm)
+        t = msg["time"] - start_time
+        print("{: >8.3f} {}".format(t, conversation.stringify_msg(msg)))
