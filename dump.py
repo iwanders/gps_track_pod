@@ -2,7 +2,7 @@
 
 import sys
 from usb_pdml import USBPDML
-from messages import Msg
+from protocol import Packet
 
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
@@ -19,6 +19,6 @@ if __name__ == "__main__":
         print("{: >8.3f} {}".format(t, conversation.stringify_msg(msg)))
         # if msg["direction"] == "out":
         if "data" in msg:
-            print(Msg.read(bytes(msg["data"])))
+            print(Packet.read(bytes(msg["data"])))
         if (index > 80):
             break

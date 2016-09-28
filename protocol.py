@@ -24,6 +24,7 @@
 
 import ctypes
 from collections import namedtuple
+import crcmod
 
 PACKET_SIZE = 128
 
@@ -73,9 +74,12 @@ class Dictionary:
 
 
 #############################################################################
+
+crc_proto = crcmod.mkCrcFun(poly=0x11021, initCrc=0xFFFF, rev=False, xorOut=0)
+
 # Structs for the various parts in the firmware. These correspond to
 # the structures as defined in the header files.
-class MsgHeader(ctypes.LittleEndianStructure, Dictionary):
+class PacketHeader(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     # https://github.com/openambitproject/openambit/blob/master/src/libambit/protocol.c#L41
     _fields_ = [("magic", ctypes.c_uint8),
@@ -85,8 +89,33 @@ class MsgHeader(ctypes.LittleEndianStructure, Dictionary):
                 ("sequence", ctypes.c_uint16),
                 ("header_checksum", ctypes.c_uint16)]
 
-    #def __str__(self):
-       #return "cmd: {:0>4X}, len: {:0>4d}, seq: {:0>4d} {}".format(self.command, self.len, self.sequence, (" {:0>2X}"*len(bytes(self))).format(*bytes(self)))
+    def is_correct(self):
+        header_bytes = bytes(self)[2:-2]
+        calc_crc = crc_proto(header_bytes)
+        return (calc_crc == self.header_checksum) and \
+                (self.usb_length == self.message_length + 8) and \
+                (self.magic == 0x3f)
+
+    def get_parts_count(self):
+        if (self.message_part == 0x5d):
+            return self.sequence
+        return 1
+
+    def get_part(self):
+        if (self.message_part == 0x5e):
+            return self.sequence
+        else:
+            return 0
+
+    def __str__(self):
+        is_ok = self.is_correct()
+        if (is_ok):
+            return "part: {: >1d}/{: >1d}, sequence: {: >3d}, len: {: >3d}".format(self.get_part(), self.get_parts_count(), self.sequence, self.message_length)
+        else:
+            return "damaged header"
+
+
+
 
 class MsgBodyCommand(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -100,16 +129,16 @@ class MsgBodyCommand(ctypes.LittleEndianStructure, Dictionary):
 # create the composite message.
 class _MsgBody(ctypes.Union):
     # checksum is at the end of the body length, not at the end of packet!
-    _fields_ = [("raw", ctypes.c_byte * (PACKET_SIZE-ctypes.sizeof(MsgHeader))),
+    _fields_ = [("raw", ctypes.c_byte * (PACKET_SIZE-ctypes.sizeof(PacketHeader))),
                 ("command", MsgBodyCommand)]
 
 #############################################################################
 
 
 # Class which represents all messages. That is; it holds all the structs.
-class Msg(ctypes.LittleEndianStructure, Readable):
+class Packet(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
-    _fields_ = [("header", MsgHeader),
+    _fields_ = [("header", PacketHeader),
                 ("_body", _MsgBody)]
     _anonymous_ = ["_body"]
 
@@ -121,7 +150,8 @@ class Msg(ctypes.LittleEndianStructure, Readable):
         #else:
         message_field = str(self.header)
         # payload_text = "-"
-        return "<Msg {}: {}>".format(message_field, self.command)
+        # print(self.header.is_correct())
+        return "<Packet {}: {}>".format(message_field, self.raw)
 
     # We have to treat the mixin slightly different here, since we there is
     # special handling for the message type and thus the body.
