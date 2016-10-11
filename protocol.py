@@ -99,7 +99,7 @@ class PacketHeader(ctypes.LittleEndianStructure, Dictionary):
     def get_parts_count(self):
         if (self.message_part == 0x5d):
             return self.sequence
-        return 1
+        return 0
 
     def get_part(self):
         if (self.message_part == 0x5e):

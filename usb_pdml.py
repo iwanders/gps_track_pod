@@ -110,7 +110,7 @@ class USBPDML():
         summary = {}
         self.interactions_full[packet["num"]] = packet
         summary["type"] = "interrupt" if packet["usb.transfer_type"] == USB_TRANSFER_INTERRUPT else "control"
-        summary["direction"] = "in" if packet["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN else "out"
+        summary["direction"] = "<" if packet["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN else ">"
         summary["endpoint"] = packet["usb.endpoint_number.endpoint"]
         summary["num"] = packet["num"]
         summary["time"] = packet["frame.time_epoch"]
@@ -145,7 +145,7 @@ class USBPDML():
             customstring = msg["usb.bString"]
         if ("data" in msg):
             customstring = " ".join(["{:0>2X}".format(d) for d in msg["data"]])
-        return "{endpoint: >2d} {direction: >3s} {stype} {addition}".format(stype=msg["type"][0:3], addition=customstring, **msg)
+        return "{endpoint: >2d} {direction: >1s} {stype} {addition}".format(stype=msg["type"][0:3], addition=customstring, **msg)
         
 
 if __name__ == "__main__":

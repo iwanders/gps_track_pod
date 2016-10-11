@@ -20,5 +20,5 @@ if __name__ == "__main__":
         # if msg["direction"] == "out":
         if "data" in msg:
             print(Packet.read(bytes(msg["data"])))
-        if (index > 80):
+        if (index > 280):
             break
