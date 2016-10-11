@@ -23,6 +23,7 @@
 # SOFTWARE.
 
 import ctypes
+import struct
 from collections import namedtuple
 import crcmod
 
@@ -129,7 +130,7 @@ class MsgBodyCommand(ctypes.LittleEndianStructure, Dictionary):
 # create the composite message.
 class _MsgBody(ctypes.Union):
     # checksum is at the end of the body length, not at the end of packet!
-    _fields_ = [("raw", ctypes.c_byte * (PACKET_SIZE-ctypes.sizeof(PacketHeader))),
+    _fields_ = [("raw", ctypes.c_uint8 * (PACKET_SIZE-ctypes.sizeof(PacketHeader))),
                 ("command", MsgBodyCommand)]
 
 #############################################################################
@@ -151,7 +152,7 @@ class Packet(ctypes.LittleEndianStructure, Readable):
         message_field = str(self.header)
         # payload_text = "-"
         # print(self.header.is_correct())
-        return "<Packet {}: {}>".format(message_field, self.raw)
+        return "<Packet {}: {}>".format(message_field, self.data)
 
     # We have to treat the mixin slightly different here, since we there is
     # special handling for the message type and thus the body.
@@ -185,3 +186,17 @@ class Packet(ctypes.LittleEndianStructure, Readable):
                 setattr(self, k, v)
             else:
                 setattr(self, k, set_value)
+    @property
+    def data(self):
+        data_len = self.header.message_length
+        data = self.raw[0:data_len]
+        crc_val, = struct.unpack("<H", bytes(self.raw[data_len:data_len+2]))
+        crc_calcd = crc_proto(bytes(data), crc=self.header.header_checksum)
+        if (crc_val == crc_calcd):
+            return data
+        else:
+            return None
+
+    @data.setter
+    def data(self, value):
+        print("setting: {}".format(value))
