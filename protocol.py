@@ -97,74 +97,46 @@ class PacketHeader(ctypes.LittleEndianStructure, Dictionary):
                 (self.usb_length == self.message_length + 8) and \
                 (self.magic == 0x3f)
 
-    def get_parts_count(self):
-        if (self.message_part == 0x5d):
-            return self.sequence
-        return 0
+    def is_first(self):
+        return self.message_part == 0x5D # first part in sequence
 
-    def get_part(self):
-        if (self.message_part == 0x5e):
-            return self.sequence
-        else:
-            return 0
+    def get_part_counter(self):
+        return self.sequence
 
     def __str__(self):
         is_ok = self.is_correct()
         if (is_ok):
-            return "part: {: >1d}/{: >1d}, sequence: {: >3d}, len: {: >3d}".format(self.get_part(), self.get_parts_count(), self.sequence, self.message_length)
+            if (self.is_first()):
+                return "start({: >1d}) len: {: >3d}".format(self.get_part_counter(), self.message_length)
+            else:
+                return "part({: >1d}) len: {: >3d}".format(self.get_part_counter(),  self.message_length)
         else:
             return "damaged header"
 
 
 
 
-class MsgBodyCommand(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("command", ctypes.c_uint32),
-        ("format", ctypes.c_uint16),
-        ("packet_sequence", ctypes.c_uint16),
-        ("packet_length", ctypes.c_uint32)
-    ]
-
-# create the composite message.
-class _MsgBody(ctypes.Union):
-    # checksum is at the end of the body length, not at the end of packet!
-    _fields_ = [("raw", ctypes.c_uint8 * (PACKET_SIZE-ctypes.sizeof(PacketHeader))),
-                ("command", MsgBodyCommand)]
-
 #############################################################################
 
 
 # Class which represents all messages. That is; it holds all the structs.
-class Packet(ctypes.LittleEndianStructure, Readable):
+class Fragment(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
     _fields_ = [("header", PacketHeader),
-                ("_body", _MsgBody)]
-    _anonymous_ = ["_body"]
+                ("payload", ctypes.c_uint8 * (PACKET_SIZE-ctypes.sizeof(PacketHeader)))]
 
     # Pretty print the message according to its type.
     def __str__(self):
-        # if (self.msg_type in msg_type_field):
-           # payload_text = str(getattr(self, msg_type_field[self.msg_type]))
-           # message_field = msg_type_name[self.msg_type]
-        #else:
         message_field = str(self.header)
-        # payload_text = "-"
-        # print(self.header.is_correct())
-        return "<Packet {}: {}>".format(message_field, self.data)
+        return "<Fragment {}: data({})>".format(message_field, len(self.data))
 
     # We have to treat the mixin slightly different here, since we there is
     # special handling for the message type and thus the body.
     def __iter__(self):
         for k, t in self._fields_:
-            if (k == "_body"):
-                if (self.msg_type in msg_type_field):
-                    message_field = msg_type_field[self.msg_type]
-                    body = dict(getattr(self, msg_type_field[self.msg_type]))
-                else:
-                    message_field = "raw"
-                    body = [a for a in getattr(self, message_field)]
+            if (k == "payload"):
+                message_field = "payload"
+                body = [a for a in getattr(self, message_field)]
                 yield (message_field, body)
             elif (issubclass(t, ctypes.Structure)):
                 yield (k, dict(getattr(self, k)))
@@ -189,8 +161,8 @@ class Packet(ctypes.LittleEndianStructure, Readable):
     @property
     def data(self):
         data_len = self.header.message_length
-        data = self.raw[0:data_len]
-        crc_val, = struct.unpack("<H", bytes(self.raw[data_len:data_len+2]))
+        data = self.payload[0:data_len]
+        crc_val, = struct.unpack("<H", bytes(self.payload[data_len:data_len+2]))
         crc_calcd = crc_proto(bytes(data), crc=self.header.header_checksum)
         if (crc_val == crc_calcd):
             return data
@@ -200,3 +172,75 @@ class Packet(ctypes.LittleEndianStructure, Readable):
     @data.setter
     def data(self, value):
         print("setting: {}".format(value))
+
+class FragmentFeed:
+    def __init__(self):
+        self.fragments = []
+
+    def packet(self, fragment):
+        if (fragment.header.is_first()):
+            # this is the first fragment of a packet.
+            if ((len(self.fragments) != 0)):
+                # problem right there, we already have fragments.
+                print("Detected new packet while old packet isn't finished.")
+                self.fragments = []
+
+
+            self.fragments.append(fragment)
+        else:
+            # this is not the first, so we append it, check sequence number, and if finished return.
+            self.fragments.append(fragment)
+
+
+        # we have the right number of fragments, create the packet data and return.
+        if (len(self.fragments) == self.fragments[0].header.get_part_counter()):
+            # packet is finished!
+            packet_data = []
+            for j in self.fragments:
+                if (j.data):
+                    packet_data += j.data
+                else:
+                    print("Checksum failed, discarding data")
+                    self.fragments = []
+                    return None
+            self.fragments = []
+            return packet_data
+
+        if (len(self.fragments) >= 2):
+            if (fragment.header.get_part_counter() + 1 != len(self.fragments)):
+                print("Sequence number not matching")
+                self.fragments = []
+                return None
+            
+
+
+
+class Command(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("command", ctypes.c_uint16),
+        ("direction", ctypes.c_uint16),
+        ("format", ctypes.c_uint16),
+        ("packet_sequence", ctypes.c_uint16),
+        ("packet_length", ctypes.c_uint32)
+    ]
+    def __str__(self):
+        return "cmd 0x{:0>4X}, fmt 0x{:0>2X}, seq 0x{:0>2X}, len {:0>2d}".format(self.command, self.format, self.packet_sequence, self.packet_length)
+
+class Packet(ctypes.LittleEndianStructure, Readable):
+    def __str__(self):
+        return "<Packet cmd: {:4>0X}, seq: {:3>0d}, len: {:3>0d}, {}, {}>".format(self.command.command, self.command.packet_sequence, self.command.packet_length, self.packet_length, [hex(a) for a in self.payload])
+
+def packet_factory(byte_object):
+    packet_payload_length = len(byte_object)-ctypes.sizeof(Command)
+    class Packet_(Packet):
+        _pack_ = 1
+        packet_length = packet_payload_length
+        _fields_ = [("command", Command),
+                    ("payload", ctypes.c_uint8 * packet_payload_length)]
+    a = Packet_()
+    ctypes.memmove(ctypes.addressof(a), bytes(byte_object),
+                   min(len(byte_object), ctypes.sizeof(Packet_)))
+    return a
+    
+
