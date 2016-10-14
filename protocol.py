@@ -77,9 +77,11 @@ class Dictionary:
 #############################################################################
 
 crc_proto = crcmod.mkCrcFun(poly=0x11021, initCrc=0xFFFF, rev=False, xorOut=0)
-USB_PACKET_SIZE = 128
+USB_PACKET_SIZE = 64
 MAX_PACKET_SIZE = 540 # maximum protocol packet size. (Split over USBPackets)
 
+USB_PACKET_MESSAGE_PART_FIRST = 0x5D
+USB_PACKET_MESSAGE_PART_NEXT = 0x5E
 
 #############################################################################
 # USB Packet handling.
@@ -101,8 +103,14 @@ class USBPacketHeader(ctypes.LittleEndianStructure, Dictionary):
                 (self.usb_length == self.message_length + 8) and \
                 (self.magic == 0x3f)
 
+    def make_correct(self):
+        header_bytes = bytes(self)[2:-2]
+        calc_crc = crc_proto(header_bytes)
+        self.header_checksum = calc_crc
+        self.magic = 0x3f        
+
     def is_first(self):
-        return self.message_part == 0x5D # first part in sequence
+        return self.message_part == USB_PACKET_MESSAGE_PART_FIRST # first part in sequence
 
     def get_part_counter(self):
         return self.sequence
@@ -123,44 +131,18 @@ class USBPacketHeader(ctypes.LittleEndianStructure, Dictionary):
 
 
 # Class which represents all messages. That is; it holds all the structs.
-class USBPacket(ctypes.LittleEndianStructure, Readable):
+class USBPacket(ctypes.LittleEndianStructure, Readable, Dictionary):
     _pack_ = 1
     _fields_ = [("header", USBPacketHeader),
                 ("payload", ctypes.c_uint8 * (USB_PACKET_SIZE-ctypes.sizeof(USBPacketHeader)))]
 
+    max_data = (USB_PACKET_SIZE - ctypes.sizeof(USBPacketHeader)-2)
+
     # Pretty print the message according to its type.
     def __str__(self):
         message_field = str(self.header)
-        return "<USBPacket {}: data({})>".format(message_field, len(self.data))
+        return "<USBPacket {}: data({})>".format(message_field, len(self.data) if self.data else "-")
 
-    # We have to treat the mixin slightly different here, since we there is
-    # special handling for the message type and thus the body.
-    def __iter__(self):
-        for k, t in self._fields_:
-            if (k == "payload"):
-                message_field = "payload"
-                body = [a for a in getattr(self, message_field)]
-                yield (message_field, body)
-            elif (issubclass(t, ctypes.Structure)):
-                yield (k, dict(getattr(self, k)))
-            else:
-                yield (k, getattr(self, k))
-
-    def from_dict(self, dict_object):
-        # Walk through the dictionary, as we do not know which elements from
-        # the struct we would need.
-        for k, set_value in dict_object.items():
-            if (isinstance(set_value, dict)):
-                v = getattr(self, k)
-                v.from_dict(set_value)
-                setattr(self, k, v)
-            elif (isinstance(set_value, list)):
-                v = getattr(self, k)
-                for j in range(0, len(set_value)):
-                    v[j] = set_value[j]
-                setattr(self, k, v)
-            else:
-                setattr(self, k, set_value)
     @property
     def data(self):
         data_len = self.header.message_length
@@ -175,6 +157,33 @@ class USBPacket(ctypes.LittleEndianStructure, Readable):
     @data.setter
     def data(self, value):
         print("setting: {}".format(value))
+
+# returns one or multiple usb packets.
+def usbpacketizer(packet):
+    d = bytes(packet)
+    # minus 2 for the payload checksum.
+    packet_number = int(len(d) / (USBPacket.max_data))+1
+    print(packet_number)
+    packets = []
+    # creating the first packet.
+    p = USBPacket()
+    p.header.message_part = USB_PACKET_MESSAGE_PART_FIRST
+    p.header.sequence = packet_number
+    p.header.message_length = min(USBPacket.max_data, len(d))
+    p.header.usb_length = p.header.message_length+8
+    p.data = d[0:min(USBPacket.max_data, len(d))]
+    p.header.make_correct()
+    packets.append(p)
+
+    for i in range(1, packet_number):
+        print("Creating packet {}".format(i))
+        p = USBPacket()
+        p.header.message_part = USB_PACKET_MESSAGE_PART_NEXT
+        p.header.make_correct()
+        packets.append(p)
+
+    return packets
+
 
 class USBPacketFeed:
     def __init__(self):
@@ -214,7 +223,8 @@ class USBPacketFeed:
                 print("Sequence number not matching")
                 self.packets = []
                 return None
-            
+
+
 
 #############################################################################
 # Higher level protocol messages. Often composed of several USBPackets
@@ -306,13 +316,14 @@ class Packet(ctypes.LittleEndianStructure, Readable):
                 ("_body", PacketBody_)]
     _anonymous_ = ["_body",]
 
-    command_id = None
-    direction_id = None
+    command_id = 0
+    direction_id = 0
+    packet_format = 0x09
     body_field = "raw"
  
     def __init__(self):
         message_body = getattr(self, self.body_field)
-        self.command.format = 0x09
+        self.command.format = self.packet_format
         self.command.command = self.command_id
         self.command.direction = self.direction_id
         self.body_length = ctypes.sizeof(message_body)
@@ -355,6 +366,7 @@ class MsgDeviceInfoReply(Packet):
 class MsgDeviceInfoRequest(Packet):
     command_id = 0x0000
     direction_id = 0x0001
+    packet_format = 0x0000
     body_field = "device_info_request"
 
     def __init__(self):
