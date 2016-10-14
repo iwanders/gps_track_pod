@@ -249,6 +249,15 @@ class BodyDeviceInfo(ctypes.LittleEndianStructure, Dictionary):
                 version_string += "{}: {}.{}.{}.{} ".format(k.replace("_version", ""), *v)
         return "Model: {}, Serial: {}, {}".format(self.model, self.serial, version_string)
 
+class BodyDeviceInfoRequest(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("version", ctypes.c_uint8 * 4)
+    ]
+    def __str__(self):
+        return "version " + ".".join(["{:>02d}".format(a) for a in self.version])
+    
+
 class BodyDateTime(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
@@ -284,6 +293,7 @@ class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
 class PacketBody_(ctypes.Union):
     _fields_ = [("raw", ctypes.c_uint8 * (MAX_PACKET_SIZE - ctypes.sizeof(Command))),
                 ("device_info", BodyDeviceInfo),
+                ("device_info_request", BodyDeviceInfoRequest),
                 ("device_status", BodyDeviceStatus),
                 ("date_time", BodyDateTime),
                 ("empty", BodyEmpty),
@@ -300,6 +310,14 @@ class Packet(ctypes.LittleEndianStructure, Readable):
     direction_id = None
     body_field = "raw"
  
+    def __init__(self):
+        message_body = getattr(self, self.body_field)
+        self.command.format = 0x09
+        self.command.command = self.command_id
+        self.command.direction = self.direction_id
+        self.body_length = ctypes.sizeof(message_body)
+        self.command.packet_length = self.body_length
+
     @classmethod
     def read(cls, byte_object):
         a = cls()
@@ -314,6 +332,13 @@ class Packet(ctypes.LittleEndianStructure, Readable):
         else:
             message_body = str(getattr(self, self.body_field))
             return "<{} {}, {}>".format(self.__class__.__name__, self.command, message_body)
+
+    def __bytes__(self):
+        goal_length = self.body_length + ctypes.sizeof(Command)
+        a = ctypes.create_string_buffer(goal_length)
+        ctypes.memmove(ctypes.addressof(a), ctypes.addressof(self), goal_length)
+        return bytes(a)
+
 
 known_messages = []
 def register_msg(a):
@@ -330,7 +355,13 @@ class MsgDeviceInfoReply(Packet):
 class MsgDeviceInfoRequest(Packet):
     command_id = 0x0000
     direction_id = 0x0001
-    body_field = "raw"
+    body_field = "device_info_request"
+
+    def __init__(self):
+        super().__init__()
+        self.device_info_request.version[0] = 2
+        self.device_info_request.version[1] = 4
+        self.device_info_request.version[2] = 89
 
 @register_msg
 class MsgSetDateRequest(Packet):

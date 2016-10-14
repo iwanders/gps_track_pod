@@ -45,6 +45,8 @@ if __name__ == "__main__":
                     incoming_command_dirs[command_dir] += 1
             #print(usb_packet)
         print("#{:0>5d}".format(index))
+        if (index > 80):
+            break
     print("outgoing:")
     print("\n".join([str(a) for a in outgoing_command_dirs.items()]))
     print("Incoming")
