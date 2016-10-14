@@ -27,8 +27,6 @@ import struct
 from collections import namedtuple
 import crcmod
 
-PACKET_SIZE = 128
-
 #############################################################################
 # Mixins & structures
 #############################################################################
@@ -75,12 +73,18 @@ class Dictionary:
 
 
 #############################################################################
+# Protocol specific parameters.
+#############################################################################
 
 crc_proto = crcmod.mkCrcFun(poly=0x11021, initCrc=0xFFFF, rev=False, xorOut=0)
+USB_PACKET_SIZE = 128
+MAX_PACKET_SIZE = 540 # maximum protocol packet size. (Split over USBPackets)
 
-# Structs for the various parts in the firmware. These correspond to
-# the structures as defined in the header files.
-class PacketHeader(ctypes.LittleEndianStructure, Dictionary):
+
+#############################################################################
+# USB Packet handling.
+#############################################################################
+class USBPacketHeader(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     # https://github.com/openambitproject/openambit/blob/master/src/libambit/protocol.c#L41
     _fields_ = [("magic", ctypes.c_uint8),
@@ -116,19 +120,18 @@ class PacketHeader(ctypes.LittleEndianStructure, Dictionary):
 
 
 
-#############################################################################
 
 
 # Class which represents all messages. That is; it holds all the structs.
-class Fragment(ctypes.LittleEndianStructure, Readable):
+class USBPacket(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
-    _fields_ = [("header", PacketHeader),
-                ("payload", ctypes.c_uint8 * (PACKET_SIZE-ctypes.sizeof(PacketHeader)))]
+    _fields_ = [("header", USBPacketHeader),
+                ("payload", ctypes.c_uint8 * (USB_PACKET_SIZE-ctypes.sizeof(USBPacketHeader)))]
 
     # Pretty print the message according to its type.
     def __str__(self):
         message_field = str(self.header)
-        return "<Fragment {}: data({})>".format(message_field, len(self.data))
+        return "<USBPacket {}: data({})>".format(message_field, len(self.data))
 
     # We have to treat the mixin slightly different here, since we there is
     # special handling for the message type and thus the body.
@@ -173,47 +176,55 @@ class Fragment(ctypes.LittleEndianStructure, Readable):
     def data(self, value):
         print("setting: {}".format(value))
 
-class FragmentFeed:
+class USBPacketFeed:
     def __init__(self):
-        self.fragments = []
+        self.packets = []
 
-    def packet(self, fragment):
-        if (fragment.header.is_first()):
+    def packet(self, packet):
+        if (packet.header.is_first()):
             # this is the first fragment of a packet.
-            if ((len(self.fragments) != 0)):
+            if ((len(self.packets) != 0)):
                 # problem right there, we already have fragments.
                 print("Detected new packet while old packet isn't finished.")
-                self.fragments = []
+                self.packets = []
 
 
-            self.fragments.append(fragment)
+            self.packets.append(packet)
         else:
             # this is not the first, so we append it, check sequence number, and if finished return.
-            self.fragments.append(fragment)
+            self.packets.append(packet)
 
 
         # we have the right number of fragments, create the packet data and return.
-        if (len(self.fragments) == self.fragments[0].header.get_part_counter()):
+        if (len(self.packets) == self.packets[0].header.get_part_counter()):
             # packet is finished!
             packet_data = []
-            for j in self.fragments:
+            for j in self.packets:
                 if (j.data):
                     packet_data += j.data
                 else:
                     print("Checksum failed, discarding data")
-                    self.fragments = []
+                    self.packets = []
                     return None
-            self.fragments = []
+            self.packets = []
             return packet_data
 
-        if (len(self.fragments) >= 2):
-            if (fragment.header.get_part_counter() + 1 != len(self.fragments)):
+        if (len(self.packets) >= 2):
+            if (packet.header.get_part_counter() + 1 != len(self.packets)):
                 print("Sequence number not matching")
-                self.fragments = []
+                self.packets = []
                 return None
             
 
+#############################################################################
+# Higher level protocol messages. Often composed of several USBPackets
+#############################################################################
 
+CommandSpec = namedtuple("CommandSpec", ["body", "name"])
+
+commands = {
+        0x0200: CommandSpec("device_info", "Device Info"),
+    }
 
 class Command(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -225,22 +236,52 @@ class Command(ctypes.LittleEndianStructure, Dictionary):
         ("packet_length", ctypes.c_uint32)
     ]
     def __str__(self):
-        return "cmd 0x{:0>4X}, fmt 0x{:0>2X}, seq 0x{:0>2X}, len {:0>2d}".format(self.command, self.format, self.packet_sequence, self.packet_length)
+        return "cmd 0x{:0>4X}, dir:0x{:0>4X} fmt 0x{:0>2X}, packseq 0x{:0>2X}, len {:0>2d}".format(self.command, self.direction, self.format, self.packet_sequence, self.packet_length)
 
-class Packet(ctypes.LittleEndianStructure, Readable):
+class BodyDeviceInfo(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("model", ctypes.c_char * 16),
+        ("serial", ctypes.c_char * 16),
+        ("fw_version", ctypes.c_uint8 * 4),
+        ("hw_version", ctypes.c_uint8 * 4),
+        ("bsl_version", ctypes.c_uint8 * 4)
+    ]
     def __str__(self):
-        return "<Packet cmd: {:4>0X}, seq: {:3>0d}, len: {:3>0d}, {}, {}>".format(self.command.command, self.command.packet_sequence, self.command.packet_length, self.packet_length, [hex(a) for a in self.payload])
+        version_string = ""
+        for k,t in self._fields_:
+            if (k.endswith("_version")):
+                v = getattr(self, k)
+                version_string += "{}: {}.{}.{}.{} ".format(k.replace("_version", ""), *v)
+        return "Model: {}, Serial: {}, {}".format(self.model, self.serial, version_string)
 
-def packet_factory(byte_object):
-    packet_payload_length = len(byte_object)-ctypes.sizeof(Command)
-    class Packet_(Packet):
-        _pack_ = 1
-        packet_length = packet_payload_length
-        _fields_ = [("command", Command),
-                    ("payload", ctypes.c_uint8 * packet_payload_length)]
-    a = Packet_()
-    ctypes.memmove(ctypes.addressof(a), bytes(byte_object),
-                   min(len(byte_object), ctypes.sizeof(Packet_)))
-    return a
-    
+class PacketBody_(ctypes.Union):
+    _fields_ = [("raw", ctypes.c_char * (MAX_PACKET_SIZE - ctypes.sizeof(Command))),
+                ("device_info", BodyDeviceInfo),
+                ]
+
+class Packet(ctypes.LittleEndianStructure):
+    _pack_ = 1
+    _fields_ = [("command", Command),
+                ("_body", PacketBody_)]
+    _anonymous_ = ["_body",]
+ 
+    @classmethod
+    def read(cls, byte_object):
+        a = cls()
+        a.body_length = len(byte_object) - ctypes.sizeof(Command)
+        ctypes.memmove(ctypes.addressof(a), bytes(byte_object),
+                       min(len(byte_object), ctypes.sizeof(cls)))
+        return a
+
+    def __str__(self):
+        
+        if (self.command.command in commands):
+            mapping = commands[self.command.command]
+            message_body = str(getattr(self, mapping.body))
+            name = mapping.name
+        else:
+            message_body = str(self.raw)
+            name = "Unknown"
+        return "<{} {}, {}>".format(name, self.command, message_body)
 

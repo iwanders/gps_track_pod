@@ -2,15 +2,17 @@
 
 import sys
 from usb_pdml import USBPDML
-from protocol import Fragment, FragmentFeed, packet_factory
+from protocol import USBPacket, USBPacketFeed, Packet
 
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
     conversation.parse_file()
     start_time = None
     index = 0
-    incoming = FragmentFeed()
-    outgoing = FragmentFeed()
+    incoming = USBPacketFeed()
+    outgoing = USBPacketFeed()
+    incoming_command_dirs = {}
+    outgoing_command_dirs = {}
     for msg in conversation.interaction():
         index += 1
         customstring = ""
@@ -21,16 +23,32 @@ if __name__ == "__main__":
         print("{: >8.3f} {}".format(t, conversation.stringify_msg(msg)))
         
         if "data" in msg:
-            if msg["direction"] == "<":
-                res = outgoing.packet(Fragment.read(bytes(msg["data"])))
-                if (res):
-                    print(packet_factory(res))
-
+            usb_packet = USBPacket.read(bytes(msg["data"]))
             if msg["direction"] == ">":
-                res = incoming.packet(Fragment.read(bytes(msg["data"])))
+                res = outgoing.packet(usb_packet)
                 if (res):
-                    print(packet_factory(res))
-            print(Fragment.read(bytes(msg["data"])))
+                    packet = Packet.read(res)
+                    print(packet)
+                    command_dir = (packet.command.command, packet.command.direction)
+                    if (not command_dir in outgoing_command_dirs):
+                        outgoing_command_dirs[command_dir] = 0
+                    outgoing_command_dirs[command_dir] += 1
+
+            if msg["direction"] == "<":
+                res = incoming.packet(usb_packet)
+                if (res):
+                    packet = Packet.read(res)
+                    print(packet)
+                    command_dir = (packet.command.command, packet.command.direction)
+                    if (not command_dir in incoming_command_dirs):
+                        incoming_command_dirs[command_dir] = 0
+                    incoming_command_dirs[command_dir] += 1
+            #print(usb_packet)
         if (index > 80):
-            break
+          break
         print("")
+    print("outgoing:")
+    print("\n".join([str(a) for a in outgoing_command_dirs.items()]))
+    print("Incoming")
+    print("\n".join([str(a) for a in incoming_command_dirs.items()]))
+
