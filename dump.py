@@ -2,7 +2,7 @@
 
 import sys
 from usb_pdml import USBPDML
-from protocol import USBPacket, USBPacketFeed, Packet
+from protocol import USBPacket, USBPacketFeed, Packet, load_packet
 
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
@@ -27,7 +27,7 @@ if __name__ == "__main__":
             if msg["direction"] == ">":
                 res = outgoing.packet(usb_packet)
                 if (res):
-                    packet = Packet.read(res)
+                    packet = load_packet(res)
                     print(packet)
                     command_dir = (packet.command.command, packet.command.direction)
                     if (not command_dir in outgoing_command_dirs):
@@ -37,16 +37,14 @@ if __name__ == "__main__":
             if msg["direction"] == "<":
                 res = incoming.packet(usb_packet)
                 if (res):
-                    packet = Packet.read(res)
+                    packet = load_packet(res)
                     print(packet)
                     command_dir = (packet.command.command, packet.command.direction)
                     if (not command_dir in incoming_command_dirs):
                         incoming_command_dirs[command_dir] = 0
                     incoming_command_dirs[command_dir] += 1
             #print(usb_packet)
-        if (index > 80):
-          break
-        print("")
+        print("#{:0>5d}".format(index))
     print("outgoing:")
     print("\n".join([str(a) for a in outgoing_command_dirs.items()]))
     print("Incoming")

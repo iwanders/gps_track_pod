@@ -220,13 +220,7 @@ class USBPacketFeed:
 # Higher level protocol messages. Often composed of several USBPackets
 #############################################################################
 
-CommandSpec = namedtuple("CommandSpec", ["body", "name"])
-
-commands = {
-        0x0200: CommandSpec("device_info", "Device Info"),
-    }
-
-class Command(ctypes.LittleEndianStructure, Dictionary):
+class Command(ctypes.LittleEndianStructure, Dictionary, Readable):
     _pack_ = 1
     _fields_ = [
         ("command", ctypes.c_uint16),
@@ -255,16 +249,56 @@ class BodyDeviceInfo(ctypes.LittleEndianStructure, Dictionary):
                 version_string += "{}: {}.{}.{}.{} ".format(k.replace("_version", ""), *v)
         return "Model: {}, Serial: {}, {}".format(self.model, self.serial, version_string)
 
+class BodyDateTime(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("year", ctypes.c_uint16),
+        ("month", ctypes.c_uint8),
+        ("day", ctypes.c_uint8),
+        ("hour", ctypes.c_uint8),
+        ("minute", ctypes.c_uint8),
+        ("ms", ctypes.c_uint16)
+    ]
+
+class BodyDeviceStatus(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("pad0", ctypes.c_uint8),
+        ("charge", ctypes.c_uint8),
+        ("pad1", ctypes.c_uint8),
+        ("pad2", ctypes.c_uint8)
+    ]
+
+class BodyPersonalSettings(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("data", ctypes.c_uint8*70)
+    ]
+    def __str__(self):
+        return "".join([" {:>02X}".format(a) for a in self.data])
+
+class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = []
+
 class PacketBody_(ctypes.Union):
-    _fields_ = [("raw", ctypes.c_char * (MAX_PACKET_SIZE - ctypes.sizeof(Command))),
+    _fields_ = [("raw", ctypes.c_uint8 * (MAX_PACKET_SIZE - ctypes.sizeof(Command))),
                 ("device_info", BodyDeviceInfo),
+                ("device_status", BodyDeviceStatus),
+                ("date_time", BodyDateTime),
+                ("empty", BodyEmpty),
+                ("personal_settings", BodyPersonalSettings),
                 ]
 
-class Packet(ctypes.LittleEndianStructure):
+class Packet(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
     _fields_ = [("command", Command),
                 ("_body", PacketBody_)]
     _anonymous_ = ["_body",]
+
+    command_id = None
+    direction_id = None
+    body_field = "raw"
  
     @classmethod
     def read(cls, byte_object):
@@ -275,13 +309,134 @@ class Packet(ctypes.LittleEndianStructure):
         return a
 
     def __str__(self):
-        
-        if (self.command.command in commands):
-            mapping = commands[self.command.command]
-            message_body = str(getattr(self, mapping.body))
-            name = mapping.name
+        if (self.body_field == "print"):
+            return "<{} {}, {}>".format(self.__class__.__name__, self.command, "".join([" {:>02X}".format(a) for a in self.raw[0:self.body_length]]))
         else:
-            message_body = str(self.raw)
-            name = "Unknown"
-        return "<{} {}, {}>".format(name, self.command, message_body)
+            message_body = str(getattr(self, self.body_field))
+            return "<{} {}, {}>".format(self.__class__.__name__, self.command, message_body)
 
+known_messages = []
+def register_msg(a):
+    known_messages.append(a)
+    return a
+
+@register_msg
+class MsgDeviceInfoReply(Packet):
+    command_id = 0x0200
+    direction_id = 0x0002
+    body_field = "device_info"
+
+@register_msg
+class MsgDeviceInfoRequest(Packet):
+    command_id = 0x0000
+    direction_id = 0x0001
+    body_field = "raw"
+
+@register_msg
+class MsgSetDateRequest(Packet):
+    command_id = 0x0203
+    direction_id = 0x0005
+    body_field = "date_time"
+
+@register_msg
+class MsgSetDateReply(Packet):
+    command_id = 0x0203
+    direction_id = 0x000a
+    body_field = "empty"
+
+@register_msg
+class MsgSetTimeRequest(Packet):
+    command_id = 0x0003
+    direction_id = 0x0005
+    body_field = "date_time"
+
+@register_msg
+class MsgSetTimeReply(Packet):
+    command_id = 0x000a
+    body_field = "empty"
+
+@register_msg
+class MsgDeviceStatusRequest(Packet):
+    command_id = 0x0603
+    direction_id = 0x0005
+    body_field = "empty"
+
+@register_msg
+class MsgDeviceStatusReply(Packet):
+    command_id = 0x0603
+    direction_id = 0x000a
+    body_field = "device_status"
+
+
+@register_msg
+class MsgLockStatusRequest(Packet):
+    command_id = 0x190B
+    direction_id = 0x0005
+    body_field = "empty"
+
+@register_msg
+class MsgLockStatusReply(Packet):
+    command_id = 0x190B
+    direction_id = 0x0202
+    body_field = "empty"
+
+@register_msg
+class MsgReadSettingsRequest(Packet):
+    command_id = 0x000B
+    direction_id = 0x0005
+    body_field = "empty"
+
+@register_msg
+class MsgReadSettingsReply(Packet):
+    command_id = 0x000B
+    direction_id = 0x000A
+    body_field = "personal_settings"
+
+
+@register_msg
+class MsgWriteSettingsRequest(Packet):
+    command_id = 0x010B
+    direction_id = 0x0005
+    body_field = "personal_settings"
+
+@register_msg
+class MsgWriteSettingsReply(Packet):
+    command_id = 0x010B
+    direction_id = 0x000a
+    body_field = "empty"
+
+@register_msg
+class MsgSettingsUnknownRequest(Packet):
+    command_id = 0x0F0B
+    # direction_id = 0x0005
+    body_field = "print"
+
+
+@register_msg
+class MsgSettingsUnknownRequest(Packet):
+    command_id = 0x100B
+    # direction_id = 0x0005
+    body_field = "print"
+
+
+
+
+message_lookup = {}
+
+for a in known_messages:
+    if ((a.command_id is not None) and (a.direction_id is not None)):
+        message_lookup[(a.command_id, a.direction_id)] = a
+    if ((a.command_id is not None) and (a.direction_id is None)):
+        message_lookup[a.command_id] = a
+
+def load_packet(byte_object):
+    cmd = Command.read(byte_object)
+    # print(cmd)
+    # print(message_lookup)
+    if ((cmd.command, cmd.direction) in message_lookup):
+        return message_lookup[(cmd.command, cmd.direction)].read(byte_object)
+    if (cmd.command in message_lookup):
+        return message_lookup[cmd.command].read(byte_object)
+    else:
+        return Packet.read(byte_object)
+    
