@@ -163,13 +163,6 @@ class USBPacket(ctypes.LittleEndianStructure, Readable, Dictionary):
         crc_calcd = crc_proto(bytes(self.payload[0:data_len]), crc=self.header.header_checksum)
         struct.pack_into("<H", self.payload, data_len, crc_calcd)
 
-
-    def __bytes__(self):
-        goal_length = self.header.usb_length+2
-        a = ctypes.create_string_buffer(goal_length)
-        ctypes.memmove(ctypes.addressof(a), ctypes.addressof(self), goal_length)
-        return bytes(a)
-
 # returns one or multiple usb packets.
 def usbpacketizer(msgdata):
     #http://stackoverflow.com/a/312464
