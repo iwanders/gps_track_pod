@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import protocol
+from . import protocol
 import usb
 import usb.util
 import sys
@@ -66,5 +66,5 @@ if __name__ == "__main__":
     c = Communicator()
     c.connect()
     c.write_msg(req)
-    print(c.read_msg())
+    print("{:s}".format(c.read_msg()))
 

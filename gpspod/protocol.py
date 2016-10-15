@@ -270,7 +270,8 @@ class BodyDeviceInfo(ctypes.LittleEndianStructure, Dictionary):
                 version_string += "{}: {}.{}.{}.{} ".format(
                                         k.replace("_version", ""), *v)
         return "Model: {}, Serial: {}, {}".format(
-                        self.model, self.serial, version_string)
+                    self.model.decode('ascii'), self.serial.decode('ascii'),
+                    version_string)
 
 
 class BodyDeviceInfoRequest(ctypes.LittleEndianStructure, Dictionary):
@@ -332,7 +333,7 @@ class MessageBody_(ctypes.Union):
                 ("personal_settings", BodyPersonalSettings),
                 ]
 
-# Should actually be renamed Msg
+
 class Message(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
     _fields_ = [("command", Command),
@@ -377,6 +378,12 @@ class Message(ctypes.LittleEndianStructure, Readable):
         ctypes.memmove(ctypes.addressof(a), ctypes.addressof(self), length)
         return bytes(a)
 
+    def __format__(self, format_spec):
+        if (format_spec == "r"):
+            return str(self)
+        if (format_spec == "s"):
+            return str(getattr(self, self.body_field))
+        
 
 known_messages = []
 
