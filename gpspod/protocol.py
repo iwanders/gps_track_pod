@@ -30,6 +30,8 @@ import crcmod
 # Mixins & structures
 #############################################################################
 # Convenience mixin to allow construction of struct from a byte like object.
+
+
 class Readable:
     @classmethod
     def read(cls, byte_object):
@@ -77,7 +79,7 @@ class Dictionary:
 
 crc_proto = crcmod.mkCrcFun(poly=0x11021, initCrc=0xFFFF, rev=False, xorOut=0)
 USB_PACKET_SIZE = 64
-MAX_PACKET_SIZE = 540 # maximum protocol packet size. (Split over USBPackets)
+MAX_PACKET_SIZE = 540  # maximum protocol packet size. (Split over USBPackets)
 
 USB_PACKET_MESSAGE_PART_FIRST = 0x5D
 USB_PACKET_MESSAGE_PART_NEXT = 0x5E
@@ -85,6 +87,8 @@ USB_PACKET_MESSAGE_PART_NEXT = 0x5E
 #############################################################################
 # USB Packet handling.
 #############################################################################
+
+
 class USBPacketHeader(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     # https://github.com/openambitproject/openambit/blob/master/src/libambit/protocol.c#L41
@@ -99,54 +103,56 @@ class USBPacketHeader(ctypes.LittleEndianStructure, Dictionary):
         header_bytes = bytes(self)[2:-2]
         calc_crc = crc_proto(header_bytes)
         return (calc_crc == self.header_checksum) and \
-                (self.usb_length == self.message_length + 8) and \
-                (self.magic == 0x3f)
+               (self.usb_length == self.message_length + 8) and \
+               (self.magic == 0x3f)
 
     def make_correct(self):
         header_bytes = bytes(self)[2:-2]
         calc_crc = crc_proto(header_bytes)
         self.header_checksum = calc_crc
-        self.magic = 0x3f        
+        self.magic = 0x3F
 
     def is_first(self):
-        return self.message_part == USB_PACKET_MESSAGE_PART_FIRST # first part in sequence
+        return self.message_part == USB_PACKET_MESSAGE_PART_FIRST
 
     def get_part_counter(self):
         return self.sequence
 
     def __str__(self):
         is_ok = self.is_correct()
-        if (is_ok):
-            if (self.is_first()):
-                return "start({: >1d}) len: {: >3d}".format(self.get_part_counter(), self.message_length)
-            else:
-                return "part({: >1d}) len: {: >3d}".format(self.get_part_counter(),  self.message_length)
+        if (not is_ok):
+            return "damaged header part({: >1d}) len: {: >3d}".format(
+                        self.get_part_counter(),  self.message_length)
+
+        if (self.is_first()):
+            return "start({: >1d}) len: {: >3d}".format(
+                        self.get_part_counter(), self.message_length)
         else:
-            return "damaged header part({: >1d}) len: {: >3d}".format(self.get_part_counter(),  self.message_length)
-
-
-
-
+            return "part({: >1d}) len: {: >3d}".format(
+                        self.get_part_counter(),  self.message_length)
 
 
 # Class which represents all messages. That is; it holds all the structs.
 class USBPacket(ctypes.LittleEndianStructure, Readable, Dictionary):
     _pack_ = 1
     _fields_ = [("header", USBPacketHeader),
-                ("payload", ctypes.c_uint8 * (USB_PACKET_SIZE-ctypes.sizeof(USBPacketHeader)))]
+                ("payload", ctypes.c_uint8 * (
+                        USB_PACKET_SIZE-ctypes.sizeof(USBPacketHeader)))]
 
     max_data = (USB_PACKET_SIZE - ctypes.sizeof(USBPacketHeader)-2)
 
     # Pretty print the message according to its type.
     def __str__(self):
         message_field = str(self.header)
-        return "<USBPacket {}: data({})>".format(message_field, len(self.data) if self.data else "-")
+        return "<USBPacket {}: data({})>".format(
+                    message_field, len(self.data) if self.data else "-")
 
     @property
     def data(self):
         data_len = self.header.message_length
         data = self.payload[0:data_len]
-        crc_val, = struct.unpack("<H", bytes(self.payload[data_len:data_len+2]))
+        crc_val, = struct.unpack("<H",
+                                 bytes(self.payload[data_len:data_len+2]))
         crc_calcd = crc_proto(bytes(data), crc=self.header.header_checksum)
         if (crc_val == crc_calcd):
             return data
@@ -160,12 +166,14 @@ class USBPacket(ctypes.LittleEndianStructure, Readable, Dictionary):
         self.header.usb_length = self.header.message_length+8
         self.header.make_correct()
         self.payload[0:data_len] = bytes(value)
-        crc_calcd = crc_proto(bytes(self.payload[0:data_len]), crc=self.header.header_checksum)
+        crc_calcd = crc_proto(bytes(self.payload[0:data_len]),
+                              crc=self.header.header_checksum)
         struct.pack_into("<H", self.payload, data_len, crc_calcd)
+
 
 # returns one or multiple usb packets.
 def usbpacketizer(msgdata):
-    #http://stackoverflow.com/a/312464
+    # http://stackoverflow.com/a/312464
     d = bytes(msgdata)
     n = USBPacket.max_data
     chunked = [d[i:i + n] for i in range(0, len(d), n)]
@@ -200,11 +208,9 @@ class USBPacketFeed:
                 self.packets = []
             self.packets.append(packet)
         else:
-            # this is not the first, so we append it, check sequence number, and if finished return.
             self.packets.append(packet)
 
-
-        # we have the right number of fragments, create the packet data and return.
+        # we have the right number of fragments, combine the data and return.
         if (len(self.packets) == self.packets[0].header.get_part_counter()):
             # packet is finished!
             packet_data = []
@@ -225,7 +231,6 @@ class USBPacketFeed:
                 return None
 
 
-
 #############################################################################
 # Higher level protocol messages. Often composed of several USBPackets
 #############################################################################
@@ -239,8 +244,13 @@ class Command(ctypes.LittleEndianStructure, Dictionary, Readable):
         ("packet_sequence", ctypes.c_uint16),
         ("packet_length", ctypes.c_uint32)
     ]
+
     def __str__(self):
-        return "cmd 0x{:0>4X}, dir:0x{:0>4X} fmt 0x{:0>2X}, packseq 0x{:0>2X}, len {:0>2d}".format(self.command, self.direction, self.format, self.packet_sequence, self.packet_length)
+        return "cmd 0x{:0>4X}, dir:0x{:0>4X} fmt 0x{:0>2X}"\
+                ", packseq 0x{:0>2X}, len {:0>2d}".format(
+                        self.command, self.direction, self.format,
+                        self.packet_sequence, self.packet_length)
+
 
 class BodyDeviceInfo(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -251,22 +261,28 @@ class BodyDeviceInfo(ctypes.LittleEndianStructure, Dictionary):
         ("hw_version", ctypes.c_uint8 * 4),
         ("bsl_version", ctypes.c_uint8 * 4)
     ]
+
     def __str__(self):
         version_string = ""
-        for k,t in self._fields_:
+        for k, t in self._fields_:
             if (k.endswith("_version")):
                 v = getattr(self, k)
-                version_string += "{}: {}.{}.{}.{} ".format(k.replace("_version", ""), *v)
-        return "Model: {}, Serial: {}, {}".format(self.model, self.serial, version_string)
+                version_string += "{}: {}.{}.{}.{} ".format(
+                                        k.replace("_version", ""), *v)
+        return "Model: {}, Serial: {}, {}".format(
+                        self.model, self.serial, version_string)
+
 
 class BodyDeviceInfoRequest(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
         ("version", ctypes.c_uint8 * 4)
     ]
+
     def __str__(self):
-        return "version " + ".".join(["{:>02d}".format(a) for a in self.version])
-    
+        return "version: " + ".".join(
+                    ["{:>02d}".format(a) for a in self.version])
+
 
 class BodyDateTime(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -279,6 +295,7 @@ class BodyDateTime(ctypes.LittleEndianStructure, Dictionary):
         ("ms", ctypes.c_uint16)
     ]
 
+
 class BodyDeviceStatus(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
@@ -288,20 +305,25 @@ class BodyDeviceStatus(ctypes.LittleEndianStructure, Dictionary):
         ("pad2", ctypes.c_uint8)
     ]
 
+
 class BodyPersonalSettings(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
         ("data", ctypes.c_uint8*70)
     ]
+
     def __str__(self):
         return "".join([" {:>02X}".format(a) for a in self.data])
+
 
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = []
 
+
 class PacketBody_(ctypes.Union):
-    _fields_ = [("raw", ctypes.c_uint8 * (MAX_PACKET_SIZE - ctypes.sizeof(Command))),
+    _fields_ = [("raw", ctypes.c_uint8 * (
+                            MAX_PACKET_SIZE - ctypes.sizeof(Command))),
                 ("device_info", BodyDeviceInfo),
                 ("device_info_request", BodyDeviceInfoRequest),
                 ("device_status", BodyDeviceStatus),
@@ -310,17 +332,18 @@ class PacketBody_(ctypes.Union):
                 ("personal_settings", BodyPersonalSettings),
                 ]
 
+
 class Packet(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
     _fields_ = [("command", Command),
                 ("_body", PacketBody_)]
-    _anonymous_ = ["_body",]
+    _anonymous_ = ["_body", ]
 
     command_id = 0
     direction_id = 0
     packet_format = 0x09
     body_field = "raw"
- 
+
     def __init__(self):
         message_body = getattr(self, self.body_field)
         self.command.format = self.packet_format
@@ -339,28 +362,36 @@ class Packet(ctypes.LittleEndianStructure, Readable):
 
     def __str__(self):
         if (self.body_field == "print"):
-            return "<{} {}, {}>".format(self.__class__.__name__, self.command, "".join([" {:>02X}".format(a) for a in self.raw[0:self.body_length]]))
+            body_str = "".join(
+                [" {:>02X}".format(a) for a in self.raw[0:self.body_length]])
+            return "<{} {}, {}>".format(
+                self.__class__.__name__, self.command, body_str)
         else:
             message_body = str(getattr(self, self.body_field))
-            return "<{} {}, {}>".format(self.__class__.__name__, self.command, message_body)
+            return "<{} {}, {}>".format(
+                    self.__class__.__name__, self.command, message_body)
 
     def __bytes__(self):
-        goal_length = self.body_length + ctypes.sizeof(Command)
-        a = ctypes.create_string_buffer(goal_length)
-        ctypes.memmove(ctypes.addressof(a), ctypes.addressof(self), goal_length)
+        length = self.body_length + ctypes.sizeof(Command)
+        a = ctypes.create_string_buffer(length)
+        ctypes.memmove(ctypes.addressof(a), ctypes.addressof(self), length)
         return bytes(a)
 
 
 known_messages = []
+
+
 def register_msg(a):
     known_messages.append(a)
     return a
+
 
 @register_msg
 class MsgDeviceInfoReply(Packet):
     command_id = 0x0200
     direction_id = 0x0002
     body_field = "device_info"
+
 
 @register_msg
 class MsgDeviceInfoRequest(Packet):
@@ -375,11 +406,13 @@ class MsgDeviceInfoRequest(Packet):
         self.device_info_request.version[1] = 4
         self.device_info_request.version[2] = 89
 
+
 @register_msg
 class MsgSetDateRequest(Packet):
     command_id = 0x0203
     direction_id = 0x0005
     body_field = "date_time"
+
 
 @register_msg
 class MsgSetDateReply(Packet):
@@ -387,22 +420,26 @@ class MsgSetDateReply(Packet):
     direction_id = 0x000a
     body_field = "empty"
 
+
 @register_msg
 class MsgSetTimeRequest(Packet):
     command_id = 0x0003
     direction_id = 0x0005
     body_field = "date_time"
 
+
 @register_msg
 class MsgSetTimeReply(Packet):
     command_id = 0x000a
     body_field = "empty"
+
 
 @register_msg
 class MsgDeviceStatusRequest(Packet):
     command_id = 0x0603
     direction_id = 0x0005
     body_field = "empty"
+
 
 @register_msg
 class MsgDeviceStatusReply(Packet):
@@ -417,17 +454,20 @@ class MsgLockStatusRequest(Packet):
     direction_id = 0x0005
     body_field = "empty"
 
+
 @register_msg
 class MsgLockStatusReply(Packet):
     command_id = 0x190B
     direction_id = 0x0202
     body_field = "empty"
 
+
 @register_msg
 class MsgReadSettingsRequest(Packet):
     command_id = 0x000B
     direction_id = 0x0005
     body_field = "empty"
+
 
 @register_msg
 class MsgReadSettingsReply(Packet):
@@ -442,11 +482,13 @@ class MsgWriteSettingsRequest(Packet):
     direction_id = 0x0005
     body_field = "personal_settings"
 
+
 @register_msg
 class MsgWriteSettingsReply(Packet):
     command_id = 0x010B
     direction_id = 0x000a
     body_field = "empty"
+
 
 @register_msg
 class MsgSettingsUnknownRequest(Packet):
@@ -462,8 +504,6 @@ class MsgSettingsUnknownRequest(Packet):
     body_field = "print"
 
 
-
-
 message_lookup = {}
 
 for a in known_messages:
@@ -471,6 +511,7 @@ for a in known_messages:
         message_lookup[(a.command_id, a.direction_id)] = a
     if ((a.command_id is not None) and (a.direction_id is None)):
         message_lookup[a.command_id] = a
+
 
 def load_packet(byte_object):
     cmd = Command.read(byte_object)
@@ -485,9 +526,9 @@ def load_packet(byte_object):
 
 
 if __name__ == "__main__":
-    hexstr_to_bytes = lambda x: bytes([int(a,16) for a in x.split(":")])
-    get_device_info = "3f:18:5d:10:01:00:2f:b8:00:00:01:00:00:00:00:00:04:00:00:"\
-                        "00:02:04:59:00:af:4f"
+    def hexstr_to_bytes(x): return bytes([int(a, 16) for a in x.split(":")])
+    get_device_info = "3f:18:5d:10:01:00:2f:b8:00:00:01:00:00:00:00:00:04:00:"\
+                      "00:00:02:04:59:00:af:4f"
     get_device_info_b = hexstr_to_bytes(get_device_info)
     get_packet = USBPacket.read(get_device_info_b)
     print(get_packet)
@@ -509,9 +550,10 @@ if __name__ == "__main__":
         print(get_device_info_b)
         print("Difference!")
 
-
-
-    reply_device_info_1 = "3f:3e:5d:36:02:00:1a:d9:00:02:02:00:09:00:00:00:30:00:00:00:47:70:73:50:6f:64:00:00:00:00:00:00:00:00:00:00:38:37:36:31:39:39:34:36:31:37:30:30:31:30:30:30:01:06:27:00:42:02:00:00:01:04:29:c8"
+    reply_device_info_1 = "3f:3e:5d:36:02:00:1a:d9:00:02:02:00:09:00:00:00:30"\
+                          ":00:00:00:47:70:73:50:6f:64:00:00:00:00:00:00:00"\
+                          ":00:00:00:38:37:36:31:39:39:34:36:31:37:30:30:31"\
+                          ":30:30:30:01:06:27:00:42:02:00:00:01:04:29:c8"
     reply_device_info_1_b = hexstr_to_bytes(reply_device_info_1)
     reply_device_info_2 = "3f:0e:5e:06:01:00:30:d2:03:00:00:02:00:00:9a:83"
     reply_device_info_2_b = hexstr_to_bytes(reply_device_info_2)
@@ -524,7 +566,7 @@ if __name__ == "__main__":
     print(msg)
     usb_packets = usbpacketizer(msg)
     print(usb_packets)
-    
+
     if (bytes(usb_packets[0]) == reply_device_info_1_b):
         print("First packet matches.")
     if (bytes(usb_packets[1]) == reply_device_info_2_b):
@@ -533,4 +575,3 @@ if __name__ == "__main__":
         print(usb_packets[1])
         print(bytes(usb_packets[1]))
         print(reply_device_info_2_b)
-    

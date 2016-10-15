@@ -19,6 +19,7 @@ USB_TRANSFER_CONTROL = 2
 USB_ENDPOINT_DIRECTION_IN = 1
 USB_ENDPOINT_DIRECTION_OUT = 0
 
+
 class USBPacket():
     data_conversion = {
         "usb.endpoint_number": lambda x: int(x, 16),
@@ -26,16 +27,18 @@ class USBPacket():
         "len": lambda x: int(x, 16),
         "frame.time_epoch": lambda x: float(x),
         "caplen": lambda x: int(x, 16),
-        "usb.transfer_type": lambda x: int(x,16),
-        "usb.urb_id": lambda x: int(x,16),
-        "usb.urb_type": lambda x: int(x,16),
-        "usb.urb_status": lambda x: int(x,16),
-        "usb.endpoint_number": lambda x: int(x,16),
+        "usb.transfer_type": lambda x: int(x, 16),
+        "usb.urb_id": lambda x: int(x, 16),
+        "usb.urb_type": lambda x: int(x, 16),
+        "usb.urb_status": lambda x: int(x, 16),
+        "usb.endpoint_number": lambda x: int(x, 16),
         "usb.endpoint_number.direction": lambda x: int(x),
         "usb.endpoint_number.endpoint": lambda x: int(x),
-        "usb.capdata": lambda x: [int(c,16) for c in [x[i:i + 2] for i in range(0, len(x), 2)]],
-        "usb.bString": lambda z: "".join([chr(int(c[2:4] + c[0:2],16)) for c in [z[i:i+4] for i in range(0, len(z), 4)]])
-        
+        "usb.capdata": lambda x: [
+                int(c, 16) for c in [x[i:i + 2] for i in range(0, len(x), 2)]],
+        "usb.bString": lambda z: "".join(
+            [chr(int(c[2:4] + c[0:2], 16)) for c in
+                [z[i:i+4]for i in range(0, len(z), 4)]])
     }
 
     def __init__(self, packet):
@@ -49,11 +52,11 @@ class USBPacket():
             if (f in element.attrib):
                 fieldname = element.attrib["name"]
                 fieldvalue = element.attrib.get(f, None)
-                self.d[name] = self.data_conversion[name](fieldvalue) if name in self.data_conversion else fieldvalue
+                self.d[name] = self.data_conversion[name](fieldvalue) if name\
+                    in self.data_conversion else fieldvalue
                 break
         if ("showname" in element.attrib):
             self.s[element.attrib["name"]] = element.attrib["showname"]
-
 
     def parse(self, element):
         for el in element:
@@ -71,7 +74,8 @@ class USBPacket():
         ks = sorted(k)
         representation = ""
         for k in ks:
-            representation += " "*k.count(".") + "{}: {} ({})\n".format(k, self.d[k], self.s[k] if k in self.s else "")
+            representation += " "*k.count(".") + "{}: {} ({})\n".format(
+                    k, self.d[k], self.s[k] if k in self.s else "")
         return representation
 
 
@@ -109,8 +113,10 @@ class USBPDML():
     def add_comm(self, packet):
         summary = {}
         self.interactions_full[packet["num"]] = packet
-        summary["type"] = "interrupt" if packet["usb.transfer_type"] == USB_TRANSFER_INTERRUPT else "control"
-        summary["direction"] = "<" if packet["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN else ">"
+        summary["type"] = "interrupt" if packet["usb.transfer_type"]\
+            == USB_TRANSFER_INTERRUPT else "control"
+        summary["direction"] = "<" if packet["usb.endpoint_number.direction"]\
+            == USB_ENDPOINT_DIRECTION_IN else ">"
         summary["endpoint"] = packet["usb.endpoint_number.endpoint"]
         summary["num"] = packet["num"]
         summary["time"] = packet["frame.time_epoch"]
@@ -123,7 +129,8 @@ class USBPDML():
     def usb_transaction(self, submit, completed):
         if (completed["usb.urb_status"] != URB_STATUS_SUCCESS):
             print("Failure in USB transmission!")
-        if (completed["usb.endpoint_number.direction"] == USB_ENDPOINT_DIRECTION_IN):
+        if (completed["usb.endpoint_number.direction"] ==
+                USB_ENDPOINT_DIRECTION_IN):
             # the completed one is the relevant data.
             self.add_comm(completed)
         else:
@@ -145,8 +152,9 @@ class USBPDML():
             customstring = msg["usb.bString"]
         if ("data" in msg):
             customstring = " ".join(["{:0>2X}".format(d) for d in msg["data"]])
-        return "{endpoint: >2d} {direction: >1s} {stype} {addition}".format(stype=msg["type"][0:3], addition=customstring, **msg)
-        
+        return "{endpoint: >2d} {direction: >1s}"\
+               " {stype} {addition}".format(
+                        stype=msg["type"][0:3], addition=customstring, **msg)
 
 if __name__ == "__main__":
     conversation = USBPDML(sys.argv[1])
@@ -154,8 +162,8 @@ if __name__ == "__main__":
     start_time = None
     for msg in conversation.interaction():
         customstring = ""
-        if (start_time == None):
+        if (start_time is None):
             start_time = msg["time"]
-        #print(comm)
+        # print(comm)
         t = msg["time"] - start_time
         print("{: >8.3f} {}".format(t, conversation.stringify_msg(msg)))
