@@ -321,7 +321,7 @@ class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _fields_ = []
 
 
-class PacketBody_(ctypes.Union):
+class MessageBody_(ctypes.Union):
     _fields_ = [("raw", ctypes.c_uint8 * (
                             MAX_PACKET_SIZE - ctypes.sizeof(Command))),
                 ("device_info", BodyDeviceInfo),
@@ -332,11 +332,11 @@ class PacketBody_(ctypes.Union):
                 ("personal_settings", BodyPersonalSettings),
                 ]
 
-
-class Packet(ctypes.LittleEndianStructure, Readable):
+# Should actually be renamed Msg
+class Message(ctypes.LittleEndianStructure, Readable):
     _pack_ = 1
     _fields_ = [("command", Command),
-                ("_body", PacketBody_)]
+                ("_body", MessageBody_)]
     _anonymous_ = ["_body", ]
 
     command_id = 0
@@ -387,14 +387,14 @@ def register_msg(a):
 
 
 @register_msg
-class MsgDeviceInfoReply(Packet):
+class DeviceInfoReply(Message):
     command_id = 0x0200
     direction_id = 0x0002
     body_field = "device_info"
 
 
 @register_msg
-class MsgDeviceInfoRequest(Packet):
+class DeviceInfoRequest(Message):
     command_id = 0x0000
     direction_id = 0x0001
     packet_format = 0x0000
@@ -408,97 +408,97 @@ class MsgDeviceInfoRequest(Packet):
 
 
 @register_msg
-class MsgSetDateRequest(Packet):
+class SetDateRequest(Message):
     command_id = 0x0203
     direction_id = 0x0005
     body_field = "date_time"
 
 
 @register_msg
-class MsgSetDateReply(Packet):
+class SetDateReply(Message):
     command_id = 0x0203
     direction_id = 0x000a
     body_field = "empty"
 
 
 @register_msg
-class MsgSetTimeRequest(Packet):
+class SetTimeRequest(Message):
     command_id = 0x0003
     direction_id = 0x0005
     body_field = "date_time"
 
 
 @register_msg
-class MsgSetTimeReply(Packet):
+class SetTimeReply(Message):
     command_id = 0x000a
     body_field = "empty"
 
 
 @register_msg
-class MsgDeviceStatusRequest(Packet):
+class DeviceStatusRequest(Message):
     command_id = 0x0603
     direction_id = 0x0005
     body_field = "empty"
 
 
 @register_msg
-class MsgDeviceStatusReply(Packet):
+class DeviceStatusReply(Message):
     command_id = 0x0603
     direction_id = 0x000a
     body_field = "device_status"
 
 
 @register_msg
-class MsgLockStatusRequest(Packet):
+class LockStatusRequest(Message):
     command_id = 0x190B
     direction_id = 0x0005
     body_field = "empty"
 
 
 @register_msg
-class MsgLockStatusReply(Packet):
+class LockStatusReply(Message):
     command_id = 0x190B
     direction_id = 0x0202
     body_field = "empty"
 
 
 @register_msg
-class MsgReadSettingsRequest(Packet):
+class ReadSettingsRequest(Message):
     command_id = 0x000B
     direction_id = 0x0005
     body_field = "empty"
 
 
 @register_msg
-class MsgReadSettingsReply(Packet):
+class ReadSettingsReply(Message):
     command_id = 0x000B
     direction_id = 0x000A
     body_field = "personal_settings"
 
 
 @register_msg
-class MsgWriteSettingsRequest(Packet):
+class WriteSettingsRequest(Message):
     command_id = 0x010B
     direction_id = 0x0005
     body_field = "personal_settings"
 
 
 @register_msg
-class MsgWriteSettingsReply(Packet):
+class WriteSettingsReply(Message):
     command_id = 0x010B
     direction_id = 0x000a
     body_field = "empty"
 
 
 @register_msg
-class MsgSettingsUnknownRequest(Packet):
+class SettingsUnknownRequest(Message):
     command_id = 0x0F0B
     # direction_id = 0x0005
     body_field = "print"
 
 
 @register_msg
-class MsgSettingsUnknownRequest(Packet):
+class SettingsUnknownRequest(Message):
     command_id = 0x100B
     # direction_id = 0x0005
     body_field = "print"
@@ -513,7 +513,7 @@ for a in known_messages:
         message_lookup[a.command_id] = a
 
 
-def load_packet(byte_object):
+def load_msg(byte_object):
     cmd = Command.read(byte_object)
     # print(cmd)
     # print(message_lookup)
@@ -537,7 +537,7 @@ if __name__ == "__main__":
     msgdata = compositor.packet(get_packet)
     print(msgdata)
 
-    msg = load_packet(msgdata)
+    msg = load_msg(msgdata)
     print(msg)
     usb_packets = usbpacketizer(msg)
     print(usb_packets)
@@ -562,7 +562,7 @@ if __name__ == "__main__":
     msgdata = compositor.packet(packet1)
     msgdata = compositor.packet(packet2)
     print(msgdata)
-    msg = load_packet(msgdata)
+    msg = load_msg(msgdata)
     print(msg)
     usb_packets = usbpacketizer(msg)
     print(usb_packets)
