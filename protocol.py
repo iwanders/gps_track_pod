@@ -24,7 +24,6 @@
 
 import ctypes
 import struct
-from collections import namedtuple
 import crcmod
 
 #############################################################################
@@ -123,7 +122,7 @@ class USBPacketHeader(ctypes.LittleEndianStructure, Dictionary):
             else:
                 return "part({: >1d}) len: {: >3d}".format(self.get_part_counter(),  self.message_length)
         else:
-            return "damaged header"
+            return "damaged header part({: >1d}) len: {: >3d}".format(self.get_part_counter(),  self.message_length)
 
 
 
@@ -156,30 +155,40 @@ class USBPacket(ctypes.LittleEndianStructure, Readable, Dictionary):
 
     @data.setter
     def data(self, value):
-        print("setting: {}".format(value))
+        data_len = len(value)
+        self.header.message_length = min(USBPacket.max_data, len(value))
+        self.header.usb_length = self.header.message_length+8
+        self.header.make_correct()
+        self.payload[0:data_len] = bytes(value)
+        crc_calcd = crc_proto(bytes(self.payload[0:data_len]), crc=self.header.header_checksum)
+        struct.pack_into("<H", self.payload, data_len, crc_calcd)
+
+
+    def __bytes__(self):
+        goal_length = self.header.usb_length+2
+        a = ctypes.create_string_buffer(goal_length)
+        ctypes.memmove(ctypes.addressof(a), ctypes.addressof(self), goal_length)
+        return bytes(a)
 
 # returns one or multiple usb packets.
-def usbpacketizer(packet):
-    d = bytes(packet)
-    # minus 2 for the payload checksum.
-    packet_number = int(len(d) / (USBPacket.max_data))+1
-    print(packet_number)
+def usbpacketizer(msgdata):
+    #http://stackoverflow.com/a/312464
+    d = bytes(msgdata)
+    n = USBPacket.max_data
+    chunked = [d[i:i + n] for i in range(0, len(d), n)]
     packets = []
     # creating the first packet.
     p = USBPacket()
     p.header.message_part = USB_PACKET_MESSAGE_PART_FIRST
-    p.header.sequence = packet_number
-    p.header.message_length = min(USBPacket.max_data, len(d))
-    p.header.usb_length = p.header.message_length+8
-    p.data = d[0:min(USBPacket.max_data, len(d))]
-    p.header.make_correct()
+    p.header.sequence = len(chunked)
+    p.data = chunked[0]
     packets.append(p)
 
-    for i in range(1, packet_number):
-        print("Creating packet {}".format(i))
+    for i in range(1, len(chunked)):
         p = USBPacket()
         p.header.message_part = USB_PACKET_MESSAGE_PART_NEXT
-        p.header.make_correct()
+        p.header.sequence = i
+        p.data = chunked[i]
         packets.append(p)
 
     return packets
@@ -196,8 +205,6 @@ class USBPacketFeed:
                 # problem right there, we already have fragments.
                 print("Detected new packet while old packet isn't finished.")
                 self.packets = []
-
-
             self.packets.append(packet)
         else:
             # this is not the first, so we append it, check sequence number, and if finished return.
@@ -482,4 +489,55 @@ def load_packet(byte_object):
         return message_lookup[cmd.command].read(byte_object)
     else:
         return Packet.read(byte_object)
+
+
+if __name__ == "__main__":
+    hexstr_to_bytes = lambda x: bytes([int(a,16) for a in x.split(":")])
+    get_device_info = "3f:18:5d:10:01:00:2f:b8:00:00:01:00:00:00:00:00:04:00:00:"\
+                        "00:02:04:59:00:af:4f"
+    get_device_info_b = hexstr_to_bytes(get_device_info)
+    get_packet = USBPacket.read(get_device_info_b)
+    print(get_packet)
+
+    compositor = USBPacketFeed()
+    msgdata = compositor.packet(get_packet)
+    print(msgdata)
+
+    msg = load_packet(msgdata)
+    print(msg)
+    usb_packets = usbpacketizer(msg)
+    print(usb_packets)
+
+    bytes_from_msg = bytes(usb_packets[0])
+    if (get_device_info_b == bytes_from_msg):
+        print("Get device info is correct.")
+    else:
+        print(bytes_from_msg)
+        print(get_device_info_b)
+        print("Difference!")
+
+
+
+    reply_device_info_1 = "3f:3e:5d:36:02:00:1a:d9:00:02:02:00:09:00:00:00:30:00:00:00:47:70:73:50:6f:64:00:00:00:00:00:00:00:00:00:00:38:37:36:31:39:39:34:36:31:37:30:30:31:30:30:30:01:06:27:00:42:02:00:00:01:04:29:c8"
+    reply_device_info_1_b = hexstr_to_bytes(reply_device_info_1)
+    reply_device_info_2 = "3f:0e:5e:06:01:00:30:d2:03:00:00:02:00:00:9a:83"
+    reply_device_info_2_b = hexstr_to_bytes(reply_device_info_2)
+    packet1 = USBPacket.read(reply_device_info_1_b)
+    packet2 = USBPacket.read(reply_device_info_2_b)
+    msgdata = compositor.packet(packet1)
+    msgdata = compositor.packet(packet2)
+    print(msgdata)
+    msg = load_packet(msgdata)
+    print(msg)
+    usb_packets = usbpacketizer(msg)
+    print(usb_packets)
+    
+    if (bytes(usb_packets[0]) == reply_device_info_1_b):
+        print("First packet matches.")
+    if (bytes(usb_packets[1]) == reply_device_info_2_b):
+        print("Second packet matches.")
+    else:
+        print(usb_packets[1])
+        print(bytes(usb_packets[1]))
+        print(reply_device_info_2_b)
     
