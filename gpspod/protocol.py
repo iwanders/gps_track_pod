@@ -300,11 +300,97 @@ class BodyDateTime(ctypes.LittleEndianStructure, Dictionary):
 class BodyDeviceStatus(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
-        ("pad0", ctypes.c_uint8),
-        ("charge", ctypes.c_uint8),
-        ("pad1", ctypes.c_uint8),
-        ("pad2", ctypes.c_uint8)
+        ("pad_", ctypes.c_uint8),
+        ("charge", ctypes.c_uint8)
     ]
+
+    def __str__(self):
+        return "Charge: {}%".format(self.charge)
+
+
+class BodyLogCount(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("pad_", ctypes.c_uint16),
+        ("log_count", ctypes.c_uint16)
+    ]
+
+    def __str__(self):
+        return "Log count: {}".format(self.log_count)
+
+
+class BodyLogHeaderUnwind(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("more_entries", ctypes.c_uint32)
+    ]
+
+    def __str__(self):
+        return "More Entries: {} (1024 means yes?)".format(self.more_entries)
+
+
+class BodyLogHeaderStep(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("step", ctypes.c_uint32)
+    ]
+
+    def __str__(self):
+        return "Step: {}".format(self.step)
+
+
+class BodyHeaderSummary(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("_", ctypes.c_uint8),
+        ("year", ctypes.c_uint16),
+        ("month", ctypes.c_uint8),
+        ("day", ctypes.c_uint8),
+        ("hour", ctypes.c_uint8),
+        ("minute", ctypes.c_uint8),
+        ("seconds", ctypes.c_uint8),
+    ]
+
+
+class BodyHeaderSamples(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("b", ctypes.c_uint16*10)
+    ]
+
+    def __str__(self):
+        return " ".join(["{:>02d}".format(a) for a in self.b])
+
+
+class Body_Header_(ctypes.Union):
+    _fields_ = [("samples", BodyHeaderSamples),
+                ("summary", BodyHeaderSummary),
+                ("raw", ctypes.c_uint8*100)
+                ]
+
+
+class BodyLogHeaderFormat(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("_", ctypes.c_uint16),
+        ("header_part", ctypes.c_uint16),
+        ("length", ctypes.c_uint32),
+        ("header", Body_Header_),
+    ]
+
+    def __str__(self):
+        if (self.header_part == 1):
+            # print(" ".join(["{:>02X}".format(a) for a in self.header.raw]))
+            return str(self.header.samples)
+        if (self.header_part == 2):
+            # print(" ".join(["{:>02X}".format(a) for a in self.header.raw]))
+            return str(self.header.summary)
+        return "Unknown log: part: {}, len: {} ({})".format(
+                self.header_part, self.length, " ".join(
+                    ["{:>02X}".format(a) for a in self.header.raw]))
+"""
+This header is not yet decoded well, it differs vastly from the Ambit watches.
+"""
 
 
 class BodyPersonalSettings(ctypes.LittleEndianStructure, Dictionary):
@@ -317,6 +403,28 @@ class BodyPersonalSettings(ctypes.LittleEndianStructure, Dictionary):
         return "".join([" {:>02X}".format(a) for a in self.data])
 
 
+class BodyDataRequest(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("position", ctypes.c_uint32),
+        ("length", ctypes.c_uint32)
+    ]
+
+    def __str__(self):
+        return "0x{:>04X},0x{:>04X},".format(self.position, self.length)
+
+
+class BodyDataReply(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("position", ctypes.c_uint32),
+        ("length", ctypes.c_uint32),
+        ("data", ctypes.c_uint8*512)
+    ]
+
+    def __str__(self):
+        return "0x{:>04X},0x{:>04X},".format(self.position, self.length) + " ".join(["{:>02X}".format(a) for a in self.data])
+
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = []
@@ -328,7 +436,13 @@ class MessageBody_(ctypes.Union):
                 ("device_info", BodyDeviceInfo),
                 ("device_info_request", BodyDeviceInfoRequest),
                 ("device_status", BodyDeviceStatus),
+                ("log_count", BodyLogCount),
+                ("log_header_unwind", BodyLogHeaderUnwind),
+                ("log_header_step", BodyLogHeaderStep),
+                ("log_header_format", BodyLogHeaderFormat),
                 ("date_time", BodyDateTime),
+                ("data_request", BodyDataRequest),
+                ("data_reply", BodyDataReply),
                 ("empty", BodyEmpty),
                 ("personal_settings", BodyPersonalSettings),
                 ]
@@ -362,7 +476,7 @@ class Message(ctypes.LittleEndianStructure, Readable):
         return a
 
     def __str__(self):
-        if (self.body_field == "print"):
+        if (self.body_field == "raw"):
             body_str = "".join(
                 [" {:>02X}".format(a) for a in self.raw[0:self.body_length]])
             return "<{} {}, {}>".format(
@@ -379,11 +493,10 @@ class Message(ctypes.LittleEndianStructure, Readable):
         return bytes(a)
 
     def __format__(self, format_spec):
-        if (format_spec == "r"):
+        if (format_spec == "r") or (self.body_field == "raw"):
             return str(self)
         if (format_spec == "s"):
             return str(getattr(self, self.body_field))
-        
 
 known_messages = []
 
@@ -412,33 +525,7 @@ class DeviceInfoRequest(Message):
         self.device_info_request.version[0] = 2
         self.device_info_request.version[1] = 4
         self.device_info_request.version[2] = 89
-
-
-@register_msg
-class SetDateRequest(Message):
-    command_id = 0x0203
-    direction_id = 0x0005
-    body_field = "date_time"
-
-
-@register_msg
-class SetDateReply(Message):
-    command_id = 0x0203
-    direction_id = 0x000a
-    body_field = "empty"
-
-
-@register_msg
-class SetTimeRequest(Message):
-    command_id = 0x0003
-    direction_id = 0x0005
-    body_field = "date_time"
-
-
-@register_msg
-class SetTimeReply(Message):
-    command_id = 0x000a
-    body_field = "empty"
+# ------
 
 
 @register_msg
@@ -453,6 +540,137 @@ class DeviceStatusReply(Message):
     command_id = 0x0603
     direction_id = 0x000a
     body_field = "device_status"
+# ------
+
+
+@register_msg
+class LogCountRequest(Message):
+    command_id = 0x060b
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class LogCountReply(Message):
+    command_id = 0x060b
+    direction_id = 0x000a
+    body_field = "log_count"
+# ------
+
+
+@register_msg
+class LogHeaderUnwindRequest(Message):
+    command_id = 0x070b
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class LogHeaderUnwindReply(Message):
+    command_id = 0x070b
+    direction_id = 0x000a
+    body_field = "log_header_unwind"
+# ------
+
+
+@register_msg
+class LogHeaderStepRequest(Message):
+    command_id = 0x0a0b
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class LogHeaderStepReply(Message):
+    command_id = 0x0a0b
+    direction_id = 0x000a
+    body_field = "log_header_step"
+# ------
+
+
+@register_msg
+class LogHeaderFormatRequest(Message):
+    command_id = 0x0b0b
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class LogHeaderFormatReply(Message):
+    command_id = 0x0b0b
+    direction_id = 0x000a
+    body_field = "log_header_format"
+# ------
+
+
+@register_msg
+class LogHeaderPeekRequest(Message):
+    command_id = 0x080b
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class LogHeaderPeekReply(Message):
+    command_id = 0x080b
+    direction_id = 0x000a
+    body_field = "log_header_step"
+# ------
+
+
+@register_msg
+class DataRequest(Message):
+    command_id = 0x0007
+    direction_id = 0x0005
+    body_field = "data_request"
+    block_size = 512
+
+    def __init__(self):
+        super().__init__()
+        self.data_request.length = self.block_size
+
+    def pos(self, v):
+        self.data_request.position = v
+
+
+@register_msg
+class DataReply(Message):
+    command_id = 0x0007
+    direction_id = 0x000a
+    body_field = "data_reply"
+
+    def content(self):
+        return bytes(self.data_reply.data)
+# ------
+
+
+@register_msg
+class SetDateRequest(Message):
+    command_id = 0x0203
+    direction_id = 0x0005
+    body_field = "date_time"
+
+
+@register_msg
+class SetDateReply(Message):
+    command_id = 0x0203
+    direction_id = 0x000a
+    body_field = "empty"
+# ------
+
+
+@register_msg
+class SetTimeRequest(Message):
+    command_id = 0x0003
+    direction_id = 0x0005
+    body_field = "date_time"
+
+
+@register_msg
+class SetTimeReply(Message):
+    command_id = 0x000a
+    body_field = "empty"
+# ------
 
 
 @register_msg
@@ -467,6 +685,7 @@ class LockStatusReply(Message):
     command_id = 0x190B
     direction_id = 0x0202
     body_field = "empty"
+# ------
 
 
 @register_msg
@@ -481,6 +700,7 @@ class ReadSettingsReply(Message):
     command_id = 0x000B
     direction_id = 0x000A
     body_field = "personal_settings"
+# ------
 
 
 @register_msg
@@ -495,6 +715,7 @@ class WriteSettingsReply(Message):
     command_id = 0x010B
     direction_id = 0x000a
     body_field = "empty"
+# ------
 
 
 @register_msg
@@ -509,6 +730,7 @@ class SettingsUnknownRequest(Message):
     command_id = 0x100B
     # direction_id = 0x0005
     body_field = "print"
+# ------
 
 
 message_lookup = {}
@@ -529,7 +751,7 @@ def load_msg(byte_object):
     if (cmd.command in message_lookup):
         return message_lookup[cmd.command].read(byte_object)
     else:
-        return Packet.read(byte_object)
+        return Message.read(byte_object)
 
 
 if __name__ == "__main__":

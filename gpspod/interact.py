@@ -32,6 +32,12 @@ class Communicator():
         # set the active configuration. With no arguments, the first
         # configuration will be the active one
         self.dev.set_configuration()
+        res = True
+        while(res):
+            try:
+                res = self.dev.read(0x82, 64)
+            except usb.core.USBError:
+                break
 
     def close(self):
         cfg = self.dev.get_active_configuration()
@@ -49,12 +55,12 @@ class Communicator():
     def write_msg(self, msg):
         packets = protocol.usbpacketizer(msg)
         for p in packets:
-            write_res = self.dev.write(0x02, bytes(p), timeout=100)
+            write_res = self.dev.write(0x02, bytes(p))
 
-    def read_msg(self, timeout=100):
+    def read_msg(self, timeout=1000):
         start = time.time()
         while (start + timeout / 1000.0) > time.time():
-            res = self.dev.read(0x82, 64, timeout=100)
+            res = self.dev.read(0x82, 64)
             msg_res = self.incoming.packet(protocol.USBPacket.read(res))
             if msg_res:
                 return protocol.load_msg(msg_res)
