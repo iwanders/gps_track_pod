@@ -3,6 +3,7 @@
 import sys
 from usb_pdml import USBPDML
 from protocol import USBPacket, USBPacketFeed, load_msg
+import protocol
 import pickle
 
 if __name__ == "__main__":
@@ -30,6 +31,7 @@ if __name__ == "__main__":
             "color":"\033[1;34m{0}\033[00m",
         }
     }
+    incoming_data = bytearray([])
     for msg in interactions:
         index += 1
         customstring = ""
@@ -48,7 +50,8 @@ if __name__ == "__main__":
                 if (not command_dir in dir_specific[direction]["cmds"]):
                     dir_specific[direction]["cmds"][command_dir] = 0
                 dir_specific[direction]["cmds"][command_dir] += 1
-            
+                if ((direction == "<") and (type(packet) == protocol.DataReply)):
+                    incoming_data += packet.content()
             #print(usb_packet)
         # print("#{:0>5d}".format(index))
     print(dir_specific[">"]["color"].format("outgoing (>):"))
@@ -56,3 +59,5 @@ if __name__ == "__main__":
     print(dir_specific["<"]["color"].format("Incoming (<):"))
     print("\n".join([str(a) for a in dir_specific["<"]["cmds"].items()]))
 
+    with open("/tmp/reconstructed_data.bin", "wb") as f:
+        f.write(incoming_data)

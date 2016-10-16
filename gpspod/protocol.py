@@ -423,7 +423,9 @@ class BodyDataReply(ctypes.LittleEndianStructure, Dictionary):
     ]
 
     def __str__(self):
-        return "0x{:>04X},0x{:>04X},".format(self.position, self.length) #+ " ".join(["{:>02X}".format(a) for a in self.data])
+        return "0x{:>04X},0x{:>04X},".format(self.position, self.length)
+        # + " ".join(["{:>02X}".format(a) for a in self.data])
+
 
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -641,6 +643,16 @@ class DataReply(Message):
 
     def content(self):
         return bytes(self.data_reply.data)
+"""
+The maximum position retrieved is 0x3BFE00, with size 0x0200 consistently.
+
+This means that 0x3c0000 (3.932.160) bytes are retrieved in total, this is a
+fat16 file system, which can even be mounted with:
+mount -t vfat /tmp/reconstructed_data.bin /tmp/mounted/ -o loop
+
+In this volume exists a BBPMEM.DAT file, which is exactly 3750000 bytes.
+In this file, the logs seem to start at: 0x000f4240
+"""
 # ------
 
 
@@ -731,6 +743,28 @@ class SettingsUnknownRequest(Message):
     # direction_id = 0x0005
     body_field = "print"
 # ------
+
+"""
+
+SGEE data is likely synced with:
+#   30 <DeviceInfoRequest cmd 0x0000, dir:0x0001 fmt 0x00, packseq 0x00,
+            len 04, version: 02.04.89.00>
+#   32 <DeviceInfoReply cmd 0x0200, dir:0x0002 fmt 0x09, packseq 0x00, len 48,
+        Model: GpsPod, Serial: 8761994617001000, fw: 1.6.39.0 hw: 66.2.0.0
+        bsl: 1.4.3.0 >
+#   40 <DeviceStatusRequest cmd 0x0603, dir:0x0005 fmt 0x09, packseq 0x01,
+        len 00, {}>
+#   41 <DeviceStatusReply cmd 0x0603, dir:0x000A fmt 0x09, packseq 0x01,
+        len 04, Charge: 100%>
+#   42 <Message cmd 0x150B, dir:0x0005 fmt 0x09, packseq 0x02, len 00, >
+#   43 <Message cmd 0x150B, dir:0x000A fmt 0x09, packseq 0x02, len 09,
+        00 00 00 00 00  00 00 00 00>
+        ?? |year|mo|day|
+#   53 <Message cmd 0x120B, dir:0x0005 fmt 0x09, packseq 0x03, len 520,
+        00 00 00 00 00 02 00 00 DA 18 01 00 62 12 37 07 7B 06 07 E0 09 18
+        |u32    pos|u32   chunk|u32 size?  | SGEE as from website.
+
+"""
 
 
 message_lookup = {}
