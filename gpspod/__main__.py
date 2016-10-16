@@ -30,8 +30,10 @@ for command in single_commands:
     sub_parser = subparsers.add_parser(command, help=spec.help)
 
 dump_rom = subparsers.add_parser("dump", help="Make a dump of some memory")
-dump_rom.add_argument('upto', type=int, help='number of blocks to retrieve')
-dump_rom.add_argument('--file', type=str, help='file to write to', default="/tmp/dump.bin")
+dump_rom.add_argument('-upto', type=int, default=int(0x3BFE00 / 0x0200),
+                      help='number of blocks to retrieve')
+dump_rom.add_argument('--file', type=str, default="/tmp/dump.bin",
+                      help='file to write to')
 
 # parse the arguments.
 args = parser.parse_args()
@@ -52,16 +54,22 @@ if (args.command in single_commands):
     print("{:s}".format(c.read_msg()))
 
 if (args.command == "dump"):
+    up_to_block = max(min(int(0x3BFE00 / 0x0200), int(args.upto)), 0)
+    print("Up to {:>04X} (decimal: {:>04d}).".format(up_to_block, up_to_block))
     c = Communicator()
     c.connect()
     p = protocol.DataRequest()
     f = open(args.file, "bw")
-    for i in range(args.upto):
+    sys.exit(1)
+    sequence_number = 0
+    for i in range(up_to_block):
         p.pos(i * p.block_size)
+        p.command.packet_sequence = sequence_number
         c.write_msg(p)
         ret_packet = c.read_msg()
         print("{:s}".format(ret_packet))
         f.write(ret_packet.content())
         time.sleep(0.05)
+        sequence_number += 1
         
     f.close()

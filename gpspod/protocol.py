@@ -355,7 +355,7 @@ class BodyHeaderSummary(ctypes.LittleEndianStructure, Dictionary):
 class BodyHeaderSamples(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
-        ("b", ctypes.c_uint16*10)
+        ("b", ctypes.c_uint8*35)
     ]
 
     def __str__(self):
@@ -423,7 +423,7 @@ class BodyDataReply(ctypes.LittleEndianStructure, Dictionary):
     ]
 
     def __str__(self):
-        return "0x{:>04X},0x{:>04X},".format(self.position, self.length) + " ".join(["{:>02X}".format(a) for a in self.data])
+        return "0x{:>04X},0x{:>04X},".format(self.position, self.length) #+ " ".join(["{:>02X}".format(a) for a in self.data])
 
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
