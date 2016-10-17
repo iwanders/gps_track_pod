@@ -319,16 +319,6 @@ class BodyLogCount(ctypes.LittleEndianStructure, Dictionary):
         return "Log count: {}".format(self.log_count)
 
 
-class BodyLogHeaderUnwind(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("more_entries", ctypes.c_uint32)
-    ]
-
-    def __str__(self):
-        return "More Entries: {} (1024 means yes?)".format(self.more_entries)
-
-
 class BodyLogHeaderStep(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
@@ -355,17 +345,17 @@ class BodyHeaderSummary(ctypes.LittleEndianStructure, Dictionary):
 class BodyHeaderSamples(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
-        ("b", ctypes.c_uint8*35)
+        ("b", ctypes.c_uint8*130)
     ]
 
     def __str__(self):
-        return " ".join(["{:>02d}".format(a) for a in self.b])
+        return " ".join(["{:>02X}".format(a) for a in self.b])
 
 
 class Body_Header_(ctypes.Union):
     _fields_ = [("samples", BodyHeaderSamples),
                 ("summary", BodyHeaderSummary),
-                ("raw", ctypes.c_uint8*100)
+                ("raw", ctypes.c_uint8*130)
                 ]
 
 
@@ -379,6 +369,7 @@ class BodyLogHeaderFormat(ctypes.LittleEndianStructure, Dictionary):
     ]
 
     def __str__(self):
+        return str(self.header.samples)
         if (self.header_part == 1):
             # print(" ".join(["{:>02X}".format(a) for a in self.header.raw]))
             return str(self.header.samples)
@@ -393,10 +384,19 @@ This header is not yet decoded well, it differs vastly from the Ambit watches.
 """
 
 
-class BodyPersonalSettings(ctypes.LittleEndianStructure, Dictionary):
+class BodyPersonalSettingsRead(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
         ("data", ctypes.c_uint8*70)
+    ]
+
+    def __str__(self):
+        return "".join([" {:>02X}".format(a) for a in self.data])
+
+class BodyPersonalSettingsWrite(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("data", ctypes.c_uint8*284)
     ]
 
     def __str__(self):
@@ -439,14 +439,14 @@ class MessageBody_(ctypes.Union):
                 ("device_info_request", BodyDeviceInfoRequest),
                 ("device_status", BodyDeviceStatus),
                 ("log_count", BodyLogCount),
-                ("log_header_unwind", BodyLogHeaderUnwind),
                 ("log_header_step", BodyLogHeaderStep),
                 ("log_header_format", BodyLogHeaderFormat),
                 ("date_time", BodyDateTime),
                 ("data_request", BodyDataRequest),
                 ("data_reply", BodyDataReply),
                 ("empty", BodyEmpty),
-                ("personal_settings", BodyPersonalSettings),
+                ("personal_settings_read", BodyPersonalSettingsRead),
+                ("personal_settings_write", BodyPersonalSettingsWrite),
                 ]
 
 
@@ -561,17 +561,17 @@ class LogCountReply(Message):
 
 
 @register_msg
-class LogHeaderUnwindRequest(Message):
+class LogHeaderRewindRequest(Message):
     command_id = 0x070b
     direction_id = 0x0005
     body_field = "empty"
 
 
 @register_msg
-class LogHeaderUnwindReply(Message):
+class LogHeaderRewindReply(Message):
     command_id = 0x070b
     direction_id = 0x000a
-    body_field = "log_header_unwind"
+    body_field = "log_header_step"
 # ------
 
 
@@ -618,6 +618,42 @@ class LogHeaderPeekReply(Message):
     direction_id = 0x000a
     body_field = "log_header_step"
 # ------
+"""
+    The log header commands work as follows:
+
+    First, logcount is used to retrieve the number of logs.
+
+    In case of 4 logs, client does:
+     1. logcount is used to retrieve the number of logs.
+     2. a rewind request is triggered to reset the pointer?
+     3. A step is made (reply is always 0x200?)
+     4. Log header part1 is retrieved
+     5. Log header part2 is retrieved
+     6. Logpeek is used (0x400, more values?)
+     7. Step
+     8. Log header part1 is retrieved
+     9. Logpeek is used (0x400, more values?)
+    10. Step
+    11. Log header part1 is retrieved
+    12. Logpeek is used (0x400, more values?)
+    13. Step
+    14. Log header part1 is retrieved
+    15. Logpeek no more entries: 0xc00
+    -> Data acquisition starts with command 0x0070
+
+ambit_command_log_count             = 0x0b06,
+    class LogCountRequest(Message):                 command_id = 0x060b
+ambit_command_log_head_first        = 0x0b07,
+    class LogHeaderRewindRequest(Message):          command_id = 0x070b
+    ambit_command_log_head_step         = 0x0b0a,
+    class LogHeaderStepRequest(Message):            command_id = 0x0a0b
+    ambit_command_log_head              = 0x0b0b,
+    class LogHeaderFormatRequest(Message):          command_id = 0x0b0b
+    ambit_command_log_head_peek         = 0x0b08,
+    class LogHeaderPeekRequest(Message):            command_id = 0x080b
+
+
+"""
 
 
 @register_msg
@@ -680,7 +716,8 @@ class SetTimeRequest(Message):
 
 @register_msg
 class SetTimeReply(Message):
-    command_id = 0x000a
+    command_id = 0x0003
+    direction_id = 0x000a
     body_field = "empty"
 # ------
 
@@ -711,7 +748,7 @@ class ReadSettingsRequest(Message):
 class ReadSettingsReply(Message):
     command_id = 0x000B
     direction_id = 0x000A
-    body_field = "personal_settings"
+    body_field = "personal_settings_read"
 # ------
 
 
@@ -719,7 +756,7 @@ class ReadSettingsReply(Message):
 class WriteSettingsRequest(Message):
     command_id = 0x010B
     direction_id = 0x0005
-    body_field = "personal_settings"
+    body_field = "personal_settings_write"
 
 
 @register_msg
@@ -731,18 +768,137 @@ class WriteSettingsReply(Message):
 
 
 @register_msg
-class SettingsUnknownRequest(Message):
+class SetUnknownRequestAlpha(Message):
+    """
+        Is always sent before writing the settings.
+    """
     command_id = 0x0F0B
-    # direction_id = 0x0005
-    body_field = "print"
+    direction_id = 0x0005
+    body_field = "empty"
 
 
 @register_msg
-class SettingsUnknownRequest(Message):
-    command_id = 0x100B
-    # direction_id = 0x0005
-    body_field = "print"
+class SetUnknownReplyAlpha(Message):
+    command_id = 0x0F0B
+    direction_id = 0x000a
+    body_field = "empty"
 # ------
+
+
+@register_msg
+class SetSettingsRequest(Message):
+    command_id = 0x100B
+    direction_id = 0x0005
+    body_field = "raw"
+
+
+@register_msg
+class SetSettingsReply(Message):
+    command_id = 0x100B
+    direction_id = 0x000a
+    body_field = "empty"
+# ------
+
+
+@register_msg
+class SetUnknownRequestBravo(Message):
+    """
+        Sent after settings were set.
+        -> Perhaps to reinitialize with the settings? Or commit them to disk?
+    """
+    command_id = 0x110B
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class SetUnknownReplyBravo(Message):
+    command_id = 0x110B
+    direction_id = 0x000a
+    body_field = "empty"
+# ------
+
+
+"""
+Commands prior to firmware update...
+0x0212
+0x0411
+0x0202
+0x0301
+0x000E
+
+after firmware reset
+0x0002
+perhaps a reset?
+"""
+
+
+@register_msg
+class SendFirmwareRequest(Message):
+    command_id = 0x010E
+    direction_id = 0x0005
+    # consecutive bytes?
+    body_field = "empty"
+
+
+@register_msg
+class SendFirmwareReply(Message):
+    command_id = 0x010E
+    direction_id = 0x000a
+    body_field = "empty"
+# ------
+
+
+@register_msg
+class SendResetRequest(Message):
+    """
+    This correlates with the packetcaptures -> yes, it causes a USB stack reset.
+    Internal log has the Version:1.6.39 start with very few records.
+    """
+    command_id = 0x0002
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class SendResetReply(Message):
+    command_id = 0x0002
+    direction_id = 0x000a
+    body_field = "empty"
+# ------
+
+
+@register_msg
+class ReadSGEEDateRequest(Message):
+    command_id = 0x150B
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class ReadSGEEDateReply(Message):
+    command_id = 0x150B
+    direction_id = 0x000a
+    body_field = "raw"
+# ------
+
+
+@register_msg
+class WriteSGEEDataRequest(Message):
+    command_id = 0x120B
+    direction_id = 0x0005
+    # not empty! same structure as Data from EEPROM.
+    body_field = "empty"
+
+
+@register_msg
+class WriteSGEEDataReply(Message):
+    command_id = 0x120B
+    direction_id = 0x000a
+    # not empty! same structure as Data from EEPROM.
+    body_field = "raw"
+# ------
+
 
 """
 
@@ -765,6 +921,47 @@ SGEE data is likely synced with:
         |u32    pos|u32   chunk|u32 size?  | SGEE as from website.
 
 """
+
+
+@register_msg
+class SetUnknownRequestCharlie(Message):
+    """
+        Does not occur after only SGEE sync.
+        Does always occur when EEPROM is retrieved?
+
+        Perhaps to indicate that the device is synced?
+    """
+    command_id = 0x260B
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class SetUnknownReplyCharlie(Message):
+    command_id = 0x260B
+    direction_id = 0x0202
+    body_field = "empty"
+# ------
+
+
+@register_msg
+class SetUnknownRequestDelta(Message):
+    """
+        Occurs after SGEE sync, yes.. in all instances (3)?
+
+        Perhaps to indicate that the SGEE data is synced?
+    """
+    command_id = 0x140B
+    direction_id = 0x0005
+    body_field = "empty"
+
+
+@register_msg
+class SetUnknownReplyDelta(Message):
+    command_id = 0x140B
+    direction_id = 0x000a
+    body_field = "empty"
+# ------
 
 
 message_lookup = {}

@@ -18,10 +18,11 @@ subparsers = parser.add_subparsers(dest="command")
 
 single_commands = {
     "device":Cmd(protocol.DeviceInfoRequest, "Request device info"),
+    "reset":Cmd(protocol.SendResetRequest, "Reset"),
     "settings":Cmd(protocol.ReadSettingsRequest, "Request settings"),
     "status":Cmd(protocol.DeviceStatusRequest, "Request device status"),
     "logcount":Cmd(protocol.LogCountRequest, "Request log count"),
-    "logunwind":Cmd(protocol.LogHeaderUnwindRequest, "Request header unwind"),
+    "logrewind":Cmd(protocol.LogHeaderRewindRequest, "Request header unwind"),
     "logpeek":Cmd(protocol.LogHeaderPeekRequest, "Request header peek"),
     "logstep":Cmd(protocol.LogHeaderStepRequest, "Request header step"),
     "logformat":Cmd(protocol.LogHeaderFormatRequest, "Request log format"),
@@ -65,7 +66,6 @@ if (args.command == "dump"):
     sequence_number = 0
     for i in range(up_to_block):
         p.pos(i * p.block_size)
-        p.command.packet_sequence = sequence_number
         c.write_msg(p)
         ret_packet = c.read_msg()
         print("{:s}".format(ret_packet))

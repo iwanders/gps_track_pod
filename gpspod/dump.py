@@ -32,6 +32,7 @@ if __name__ == "__main__":
         }
     }
     incoming_data = bytearray([])
+    have_printed_data = False
     for msg in interactions:
         index += 1
         customstring = ""
@@ -45,6 +46,10 @@ if __name__ == "__main__":
             res = dir_specific[direction]["feed"].packet(usb_packet)
             if (res):
                 packet = load_msg(res)
+                if (type(packet) in [protocol.DataRequest, protocol.DataReply]):
+                    if (have_printed_data):
+                        continue
+                    have_printed_data = True
                 print(dir_specific[direction]["color"].format("#{:>5d} {:r}".format(index, packet)))
                 command_dir = (packet.command.command, packet.command.direction)
                 if (not command_dir in dir_specific[direction]["cmds"]):

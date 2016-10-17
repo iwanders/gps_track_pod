@@ -11,6 +11,7 @@ class Communicator():
     def __init__(self):
         self.dev = None
         self.incoming = protocol.USBPacketFeed()
+        self.sequence_number = 0
 
     def connect(self):
         # Bus 003 Device 008: ID 1493:0020 Suunto
@@ -53,6 +54,8 @@ class Communicator():
         print(intf)
 
     def write_msg(self, msg):
+        msg.command.packet_sequence = self.sequence_number
+        self.sequence_number += 1
         packets = protocol.usbpacketizer(msg)
         for p in packets:
             write_res = self.dev.write(0x02, bytes(p))
