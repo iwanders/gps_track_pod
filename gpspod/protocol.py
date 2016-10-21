@@ -48,7 +48,12 @@ class Dictionary:
     def __iter__(self):
         for k, t in self._fields_:
             if (issubclass(t, ctypes.Structure)):
-                yield (k, dict(getattr(self, k)))
+                if (hasattr(self, "_anonymous_") and (k in self._anonymous_)):
+                    # have to iterate through it here.
+                    for kk, tt, in dict(getattr(self, k)).items():
+                        yield (kk, tt)
+                else:
+                    yield (k, dict(getattr(self, k)))
             else:
                 yield (k, getattr(self, k))
 
