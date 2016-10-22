@@ -103,63 +103,10 @@ import math
 
     PMEM entries are of varying length, with one byte denoting the length of the next sample.
 """
-"""
-class Sample:
-    # this is for simple entries...
-    def __init__(self, data, id, name, itype, unit=None, scale=1, limits=None, ignore=None):
-        self.data = data
-        self.name = name
-        self.id = id
-        self.type = itype
-        self.unit = unit
-        self.scale = scale
-        self.limits = limits
-        self.ignore = ignore
-        self.return_value = None
-        self.raw_value = None
 
-        if (self.type):
-            self.raw_value = struct.unpack(self.type, self.data[0:struct.calcsize(self.type)])
-            if ((len(self.raw_value) == 1) and (type(self.raw_value[0]) == int)):
-                self.raw_value = self.raw_value[0]
-                self.return_value = self.scale * self.raw_value
-                if (self.limits):
-                    self.return_value = max(min(self.return_value,self.limits[1]),self.limits[0])
-            else:
-                self.return_value = self.raw_value
-
-    @classmethod
-    def partial(cls, *partial, **kw_partial):
-        return lambda d: cls(d, *partial, **kw_partial) 
-
-    @property
-    def value(self):
-        return self.return_value
-
-    def __str__(self):
-        r = "<"
-        r += self.name
-        r += " {} ".format(self.return_value)
-        if (self.unit):
-            r += " [{}] ".format(self.unit)
-        if (self.raw_value == self.ignore):
-            r += " (ignore) "
-        r += ">"
-        # r += " " + " ".join(["{:>02X}".format(b) for b in self.data])
-        return r
-
-class EpisodicSamples:
-    def __init__(self, *samples):
-        self.samples = samples
-
-    def __str__(self):
-        return " ".join([str(s) for s in self.samples])
-
-"""
 
 # this is for creating more convoluted data types =)
 class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
-    _fields_ = []
     scale = 1
     ignore = None
     unit = None
@@ -183,20 +130,6 @@ class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
         yield ("value", self.value)
         yield ("unit", self.unit)
 
-
-    """
-    def __str__(self):
-        r = "<"
-        r += self.__class__.__name__
-        v = self.value
-        r += " {} ".format(v)
-        if (self.unit):
-            r += " [{}] ".format(self.unit)
-        if (self.field_ == self.ignore):
-            r += " (ignore) "
-        r += ">"
-        return r
-    """
 
 class Uint8ByteIgnored255Field(FieldEntry):
     _fields_ = [("field_", ctypes.c_uint8),]
@@ -368,37 +301,6 @@ sample_types = {
     26:CadenceField,    
 }
 
-"""
-sample_lookup = { # the one-off samples?
-    1:Sample.partial(1, "Latitude", "i", "degrees", 0.0000001, (-90,90)),
-    2:Sample.partial(2, "Longitude", "i", "degrees", 0.0000001, (-180,180)),
-    3:Sample.partial(3, "Distance", "I", "meters"), #<
-    4:Sample.partial(4, "Speed", "H", "m/s", scale=0.01, ignore=65535), #<
-    5:Sample.partial(5, "HR", "B", "bpm", ignore=255),
-    6:Sample.partial(6, "Time", "I", "ms"),
-    7:Sample.partial(7, "GPSSpeed", "H", "m/s", scale=0.01),
-    8:Sample.partial(8, "WristAccSpeed", "H", "m/s", scale=0.01),
-    9:Sample.partial(9, "BikePodSpeed", "H", "m/s", scale=0.01),
-    10:Sample.partial(10, "EHPE", "I", "meters", scale=0.01),
-    11:Sample.partial(11, "EVPE", "I", "meters", scale=0.01),
-    12:Sample.partial(12, "Altitude", "h", "meters", limits=(-1000,15000)),
-    13:Sample.partial(13, "AbsPressure", "H", "hpa", scale=0.1),
-    14:Sample.partial(14, "EnergyConsumption", "H", "hcal/min"),
-    15:Sample.partial(15, "Temperature", "h", "celsius", 0.1, (-100,100)),
-    16:Sample.partial(16, "BatteryCharge", "B", "%"),
-    17:Sample.partial(17, "GPSAltitude", "i", "meters", 0.01, (-1000,15000)),
-    18:Sample.partial(18, "GPSHeading", "H", "degrees", 0.01, (0,360), ignore=65535),
-    19:Sample.partial(19, "GpsHDOP", "B", ignore=255),
-    20:Sample.partial(20, "GpsVDOP", "B", ignore=255),
-    21:Sample.partial(21, "WristCadence", "H", "rpm", ignore=65535),
-    22:Sample.partial(22, "SNR", "16c"),
-    23:Sample.partial(23, "NumberOfSatellites", "B", ignore=255),
-    24:Sample.partial(24, "SeaLevelPressure", "h", "hpa", 0.1),
-    25:Sample.partial(25, "VerticalSpeed", "h", "m/s", 0.01), #<
-    26:Sample.partial(26, "Cadence", "B", "rpm", ignore=255),
-}
-"""
-
 class DataStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
     _pack_ = 1
     pass
@@ -457,7 +359,7 @@ class TrackHeader(DataStructure):
 ]
     _anonymous_ = ["time"]
 
-class VariableLengthField():
+class VariableLengthField(DataStructure):
     def __init__(self, blob):
         # self.data = ctypes.c_uint8 * int(len(blob))
         self.data = ctypes.create_string_buffer(len(blob))
@@ -465,13 +367,26 @@ class VariableLengthField():
     @classmethod
     def read(cls, byte_object):
         a = cls(byte_object)
+        print(byte_object)
         ctypes.memmove(ctypes.addressof(a.data), bytes(byte_object),
                        min(len(byte_object), ctypes.sizeof(a.data)))
         return a
 
+    @classmethod
+    def fixed_length(cls, clskey, length):
+        class foo(cls):
+            key = clskey
+            _fields_ = [("data", ctypes.c_uint8*length)]
+        return foo
+
+
     def __iter__(self):
-        yield ("raw", self.data.value)
+        # print(dir(self))
+        # import code
+        # code.interact(local=locals())
+        yield ("raw", [a for a in self.data])
         yield ("key", self.key)
+
 
 class FallbackField(VariableLengthField):
     key = "unknown_field"
@@ -485,7 +400,6 @@ class GPSDataField(VariableLengthField):
 
 class GPSAccuracyField(VariableLengthField):
     key = "accdata"
-
 
 class LogPauseField(FieldEntry):
     key = "logpause"
@@ -713,8 +627,13 @@ class PMEMTrackEntries(PMEMEntries):
             for p in range(periodic_count):
                 type, offset, length, pos = self.parse("HHH", entry_bytes, pos)
                 self.periodic_entries.append((type, offset, length))
-                field_list.append((sample_types[type].key, sample_types[type]))
-                anonymous_fields.append(sample_types[type].key)
+                if (type in sample_types):
+                    fieldtype = sample_types[type]
+                    field_list.append((fieldtype.key, fieldtype))
+                    # anonymous_fields.append(fieldtype.key)
+                else:
+                    key = "field_type_0x{:0>2X}".format(type)
+                    field_list.append((key,  VariableLengthField.fixed_length(clskey=key, length=length)))
 
             print(field_list)
             # next, we craft our periodicStructure:
@@ -756,8 +675,8 @@ class PMEMTrackEntries(PMEMEntries):
         if (self.header_metadata is not None):
             for i in range(self.header_metadata.samples-self.retrieved_entry_count):
                 processed = self.process_entry(self.get_entry())
-                # print(processed)
-                self.entries.append(processed)
+                if processed:
+                    self.entries.append(processed)
 
 
 class InternalLogEntry:
