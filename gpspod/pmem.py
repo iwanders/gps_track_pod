@@ -432,6 +432,7 @@ class PMEMEntries():
         self.retrieved_entry_count = 0
 
     def get_entry(self):
+        # print("Retrieving entry at: {:0>8X}".format(self.pos))
         self.retrieved_entry_count += 1
         # everything is an entry headers are too!
         length, = struct.unpack("<H", self.block.file[self.pos:self.pos+2])
@@ -538,26 +539,43 @@ class PMEMTrackEntries(PMEMEntries):
 
 class PMEMLogEntries(PMEMEntries):
     def load_header(self):
-        self.header_log = self.get_entry()
-        # print(self.header_log)
+        self.header_log1 = self.get_entry()
+        print(self.header_log1)
+        print(TimeBlock.read(self.header_log1[5:]))
+        # self.header_log2 = self.get_entry()
+        # print(self.header_log2)
+        #02 00 00 00 00 DC 07 01 01 00 00 00
 
     def process_entry(self, entry_bytes):
-        # print(entry_bytes)
-    
-        entry_type, = struct.unpack("<B", entry_bytes[0:1])
-        # 05 A5 24 00 03 49 00 1E 03 00 53 74
-        # x  x   x ^time       Blen B B
-        t, = struct.unpack("<I", entry_bytes[3:7])
-        one,two = struct.unpack("<BB", entry_bytes[1:3])
-        length, sev, group = struct.unpack("<BBB", entry_bytes[7:10])
-        print("entry_type: {} : t: {}, sev: {}, grp: {}, one: {}, two:{}, Msg: {}".format(entry_type, t, sev, group,one, two, entry_bytes[10:]))
-        return []
+        pos = 0
 
-    def load_entries(self, max=100):
+        entry_type, pos = self.parse("B", entry_bytes, pos)
+        # print("\033[1;90m{0}\033[00m".format(" ".join(["{:0>2X}".format(b) for b in entry_bytes])))
+        # print("{}".format(" ".join(["{:0>2X}".format(b) for b in entry_bytes])))
+        # print(str(entry_bytes))
+
+        if (entry_type == 5):
+            # Seriously, what's up with the change in endianness for timestamp?
+            timestamp, = struct.unpack("<I", entry_bytes[pos:pos+4])
+            some_type_identifier, pos = self.parse("Ix", entry_bytes, pos+4)
+            try:
+                text = entry_bytes[pos:].decode('ascii')
+            except UnicodeDecodeError:
+                text = str(entry_bytes[pos:])
+            print("entry_type: {} : t: {: >10d}, (0x{:0>8X}), {}".format(entry_type, timestamp, some_type_identifier, text))
+
+        if (entry_type == 3):
+            print("entry_type: {} : No clue {}".format(entry_type, " ".join(["{:0>2X}".format(b) for b in entry_bytes])))
+            
+        # return True
+
+    def load_entries(self, max=1000000):
+        # probably for the best to take some limit on this...
         for i in range(max):
-            processed = self.process_entry(self.get_entry())
-            # print(processed)
-            self.entries.extend(processed)
+            data = self.get_entry()
+            if (not data):
+                break
+            self.process_entry(data)
 
 
 class PMEMTrack(PMEMBlock):
@@ -598,19 +616,24 @@ if __name__ == "__main__":
     for track in data.tracks.logs:
         track.load_header()
         track.load_entries()
+
     for track in data.tracks.logs:
         print("\n\nNew track {}".format(track.header_metadata))
         samples = track.get_entries()
         for sample in samples[:15]:
             print(sample)
 
-
-    sys.exit(1)
-
-    for j in range(25):
+    # sys.exit()
+    data.log.load_block_header()
+    data.log.load_logs()
+    for log in data.log.logs:
+        log.load_header()
+        log.load_entries()
+        
+    # for j in range(10):
         # entry = data.tracks.logs[0].get_entry()
-        a = Sample.read(entry)
-        print(" ".join(["{:0>2X}".format(a) for a in entry]) +  "  " + str(entry))
+        # a = Sample.read(entry)
+        # print(" ".join(["{:0>2X}".format(a) for a in entry]) +  "  " + str(entry))
 
     # print(data.tracks.header)
     # print(data.log.header)
