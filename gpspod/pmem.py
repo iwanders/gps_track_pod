@@ -91,6 +91,7 @@ from protocol import Readable, Dictionary
 import ctypes
 from collections import namedtuple
 import struct
+import math
 
 """
     So, we have a filesystem, with one file, which has an offset from the filesystem.
@@ -119,7 +120,8 @@ class Sample:
         if (self.type):
             self.raw_value = struct.unpack(self.type, self.data[0:struct.calcsize(self.type)])
             if ((len(self.raw_value) == 1) and (type(self.raw_value[0]) == int)):
-                self.return_value = self.scale * self.raw_value[0]
+                self.raw_value = self.raw_value[0]
+                self.return_value = self.scale * self.raw_value
                 if (self.limits):
                     self.return_value = max(min(self.return_value,self.limits[1]),self.limits[0])
             else:
@@ -142,8 +144,15 @@ class Sample:
         if (self.raw_value == self.ignore):
             r += " (ignore) "
         r += ">"
+        # r += " " + " ".join(["{:>02X}".format(b) for b in self.data])
         return r
 
+class EpisodicSamples:
+    def __init__(self, *samples):
+        self.samples = samples
+
+    def __str__(self):
+        return " ".join([str(s) for s in self.samples])
 
 # this is for creating more convoluted data types =)
 class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
@@ -216,6 +225,12 @@ class DistanceField(FieldEntry):
     scale = 1
     unit = "m"
 
+class GPSHeadingField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint16),]
+    scale = 0.01 / 360.0 * 2 * math.pi
+    unit = "rad"
+
+
 sample_lookup = { # the one-off samples?
     1:Sample.partial(1, "Latitude", "i", "degrees", 0.0000001, (-90,90)),
     2:Sample.partial(2, "Longitude", "i", "degrees", 0.0000001, (-180,180)),
@@ -255,8 +270,8 @@ class GpsUserData(DataStructure):
                 ("Time", TimeField), # 4, 4
                 ("latitude", LatitudeField), # 4 , 8
                 ("longitude", LongitudeField),# 4, 12
-                ("gpsaltitude", ctypes.c_uint16), # 2, 14
-                ("gpsheading", ctypes.c_uint8),# 2, 16
+                ("gpsaltitude", ctypes.c_int16), # 2, 14
+                ("gpsheading", GPSHeadingField),# 2, 16
                 ("EHPE", ctypes.c_uint8), #1, 17
                 ]
 
@@ -299,17 +314,7 @@ class TrackHeader(DataStructure):
                 ("distance", DistanceField), # sure
                 ("samples", ctypes.c_uint32), # sure
 ]
-    _anonymous_ = ["time","duration"]
-
-    # log_header->heartrate_min = read8inc(data, &offset);
-
-    # log_header->unknown2 = read8inc(data, &offset);
-
-    # log_header->temperature_max = read16inc(data, &offset);
-    # log_header->temperature_min = read16inc(data, &offset);
-    # log_header->distance = read32inc(data, &offset);
-    # log_header->samples_count = read32inc(data, &offset);
-    # log_header->energy_consumption = read16inc(data, &offset);
+    _anonymous_ = ["time"]
 
     
 episodic_lookup = {
@@ -496,9 +501,9 @@ class PMEMTrackEntries(PMEMEntries):
             return None
 
         if (entry_type == 1):
-            print("Bytes: {}".format(" ".join(["{:0>2X}".format(a) for a in entry_bytes[pos:]])))
+            # print("Bytes: {}".format(" ".join(["{:0>2X}".format(a) for a in entry_bytes[pos:]])))
             self.header_metadata = TrackHeader.read(entry_bytes[pos:])
-            print("Found header: {}".format(self.header_metadata))
+            # print("Found header: {}".format(self.header_metadata))
             
         # is periodic sample.
         if (entry_type == 2):
@@ -507,8 +512,8 @@ class PMEMTrackEntries(PMEMEntries):
             for sample_type, offset, length in self.periodic_entries:
                 sample = sample_lookup.get(sample_type, SampleFallback)
                 samples.append(sample(entry_bytes[pos+offset:pos+offset+length]))
-            print(" ".join([str(a) for a in samples]))
-            return samples
+            # print(" ".join([str(a) for a in samples]))
+            return EpisodicSamples(*samples)
 
         if (entry_type == 3):
             timestamp, pos = self.parse("I", entry_bytes, pos)
@@ -517,7 +522,7 @@ class PMEMTrackEntries(PMEMEntries):
             sample = episodic_lookup.get(episode_type, SampleFallback)
             # print("Remainder bytes (len:{}): {}".format(len(entry_bytes[pos:]),entry_bytes[pos:]))
             processed = sample(entry_bytes[pos:])
-            print(str(processed))
+            # print(str(processed))
             return processed
 
 
@@ -527,6 +532,9 @@ class PMEMTrackEntries(PMEMEntries):
                 processed = self.process_entry(self.get_entry())
                 # print(processed)
                 self.entries.append(processed)
+
+    def get_entries(self):
+        return self.entries
 
 class PMEMLogEntries(PMEMEntries):
     def load_header(self):
@@ -587,11 +595,16 @@ if __name__ == "__main__":
     data.tracks.load_block_header()
     data.tracks.load_logs()
     print(data.tracks.logs)
-    for i in data.tracks.logs:
-        print("Printing load headers of {}".format(str(i)))
-        i.load_header()
-        i.load_entries(5)
-    print("Log0")
+    for track in data.tracks.logs:
+        track.load_header()
+        track.load_entries()
+    for track in data.tracks.logs:
+        print("\n\nNew track {}".format(track.header_metadata))
+        samples = track.get_entries()
+        for sample in samples[:15]:
+            print(sample)
+
+
     sys.exit(1)
 
     for j in range(25):
