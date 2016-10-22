@@ -70,6 +70,8 @@ if __name__ == "__main__":
             if (res):
                 packet = load_msg(res)
                 if (type(packet) in [protocol.DataRequest, protocol.DataReply]):
+                    if type(packet) == protocol.DataReply:
+                        incoming_data += packet.content()
                     if (have_printed_data):
                         continue
                     have_printed_data = True
@@ -78,8 +80,6 @@ if __name__ == "__main__":
                 if (not command_dir in dir_specific[direction]["cmds"]):
                     dir_specific[direction]["cmds"][command_dir] = 0
                 dir_specific[direction]["cmds"][command_dir] += 1
-                if ((direction == "<") and (type(packet) == protocol.DataReply)):
-                    incoming_data += packet.content()
             #print(usb_packet)
         # print("#{:0>5d}".format(index))
     print(dir_specific[">"]["color"].format("outgoing (>):"))

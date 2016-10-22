@@ -87,12 +87,21 @@ if (args.command == "dump"):
     p = protocol.DataRequest()
     f = open(args.file, "bw")
     sequence_number = 0
-    for i in range(up_to_block):
+    error_count = 0
+    # for i in range(up_to_block):
+    i = 0
+    while (i < up_to_block) and (error_count < 10):
         p.pos(i * p.block_size)
         c.write_msg(p)
         ret_packet = c.read_msg()
-        print("{:s}".format(ret_packet))
-        f.write(ret_packet.content())
+        if (type(ret_packet) == protocol.DataReply):
+            print("Successfully retrieved {:s}".format(ret_packet))
+            i += 1
+            f.write(ret_packet.content())
+        else:
+            error_count += 1
+            print("Wrong packet response: {:s}".format(ret_packet))
+            print("Will retry this block: {:>0X}, current_error count: {}".format(i, error_count))
         time.sleep(0.01)
         sequence_number += 1
         
