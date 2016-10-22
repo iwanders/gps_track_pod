@@ -103,7 +103,7 @@ import math
 
     PMEM entries are of varying length, with one byte denoting the length of the next sample.
 """
-
+"""
 class Sample:
     # this is for simple entries...
     def __init__(self, data, id, name, itype, unit=None, scale=1, limits=None, ignore=None):
@@ -117,6 +117,7 @@ class Sample:
         self.ignore = ignore
         self.return_value = None
         self.raw_value = None
+
         if (self.type):
             self.raw_value = struct.unpack(self.type, self.data[0:struct.calcsize(self.type)])
             if ((len(self.raw_value) == 1) and (type(self.raw_value[0]) == int)):
@@ -154,8 +155,11 @@ class EpisodicSamples:
     def __str__(self):
         return " ".join([str(s) for s in self.samples])
 
+"""
+
 # this is for creating more convoluted data types =)
 class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
+    _fields_ = []
     scale = 1
     ignore = None
     unit = None
@@ -194,6 +198,12 @@ class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
         return r
     """
 
+class Uint8ByteIgnored255Field(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint8),]
+    scale = 1
+    ignore = 255
+    
+
 class Coordinate(FieldEntry):
     _fields_ = [("field_", ctypes.c_int32),]
     scale = 1e-7
@@ -201,44 +211,171 @@ class Coordinate(FieldEntry):
 
 class LatitudeField(Coordinate):
     limits = (-90, 90)
+    key = "latitude"
 
 class LongitudeField(Coordinate):
     limits = (-180, 180)
-
-class TimeField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int32),]
-    scale = 1
-    unit = "ms"
-
-class DurationField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int32),]
-    scale = 0.1
-    unit = "s"
-
-class VelocityField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16),]
-    scale = 0.01 / 3.6
-    unit = "m/s"
+    key = "longitude"
 
 class DistanceField(FieldEntry):
     _fields_ = [("field_", ctypes.c_uint32),]
     scale = 1
     unit = "m"
+    key = "distance"
+
+class HeartRateField(Uint8ByteIgnored255Field):
+    unit = "bpm"
+    key = "heartrate"
+
+class TimeField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_int32),]
+    scale = 1e-3
+    unit = "s"
+    key = "time"
+
+class DurationField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_int32),]
+    scale = 0.1
+    unit = "s"
+    key = "duration"
+
+class VerticalVelocityField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_int16),]
+    scale = 0.01
+    unit = "m/s"
+    key = "vertical_velocity"
+
+class VelocityField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint16),]
+    scale = 0.01
+    ignore=65535
+    unit = "m/s"
+    key = "speed"
+
+class GPSSpeedField(VelocityField):
+    key = "gps_speed"
+
+class WristAccSpeed(VelocityField):
+    key = "wristaccessory_speed"
+
+class BikePodSpeedField(VelocityField):
+    key = "bikepod_speed"
+
 
 class GPSHeadingField(FieldEntry):
+    key = "gps_heading"
     _fields_ = [("field_", ctypes.c_uint16),]
     scale = 0.01 / 360.0 * 2 * math.pi
-    unit = "rad"
+    unit = "radians"
+
+class UnsignedMeterField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint32),]
+    scale = 0.01
+    unit = "m"
+
+class EHPEField(UnsignedMeterField):
+    key = "EHPE"
+
+class EVPEField(UnsignedMeterField):
+    key = "EVPE"
+
+class AltitudeField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_int16),]
+    scale = 0.01
+    unit = "m"
+    key = "altitude"
+    limits = (-1000, 15000)
+
+class PressureField(FieldEntry):
+    scale = 0.1
+    unit = "hpa"
+
+class AbsPressureField(PressureField):
+    _fields_ = [("field_", ctypes.c_uint16),]
+    key = "absolute_pressure"
+
+class TemperatureField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_int16),]
+    key = "temperature"
+    scale = 0.1
+    unit = "celsius"
+    limits = (-100, 100)
+
+class BatteryChargeField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint8),]
+    key = "batterycharge"
+    unit = "%"
+
+class GPSAltitudeField(UnsignedMeterField):
+    key = "gps_altitude"
+    limits = (-1000, 15000)
+    
+
+class GPSHDOPField(Uint8ByteIgnored255Field):
+    key = "gps_hdop"
+
+class GPSVDOPField(Uint8ByteIgnored255Field):
+    key = "gps_vhdop"
+
+class WristCadenceField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint16),]
+    ignore=65535
+    unit = "rpm"
+    key = "wrist_cadence"
+
+class GPSSNRField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint8*16),]
+    unit = ""
+    key = "snr"
+    
+class NumberOfSatellitesField(Uint8ByteIgnored255Field):
+    key = "gps_satellites"
+
+class SeaLevelPressureField(PressureField):
+    _fields_ = [("field_", ctypes.c_int16),]
+    key = "sealevel_pressure"
+
+class CadenceField(Uint8ByteIgnored255Field):
+    key = "cadence"
 
 
+sample_types = {
+    1:LatitudeField,
+    2:LongitudeField,
+    3:DistanceField,
+    4:VelocityField,
+    5:HeartRateField,
+    6:TimeField,
+    7:GPSSpeedField,
+    8:VelocityField,
+    9:BikePodSpeedField,
+    10:EHPEField,
+    11:EVPEField,
+    12:AltitudeField,
+    13:AltitudeField,
+    14:AbsPressureField,
+    15:TemperatureField,
+    16:BatteryChargeField,
+    17:GPSAltitudeField,
+    18:GPSHeadingField,
+    19:GPSHDOPField,
+    20:GPSVDOPField,
+    21:WristCadenceField,
+    22:GPSSNRField,
+    23:SeaLevelPressureField,
+    24:NumberOfSatellitesField,
+    25:VerticalVelocityField,    
+    26:CadenceField,    
+}
+
+"""
 sample_lookup = { # the one-off samples?
     1:Sample.partial(1, "Latitude", "i", "degrees", 0.0000001, (-90,90)),
     2:Sample.partial(2, "Longitude", "i", "degrees", 0.0000001, (-180,180)),
-    3:Sample.partial(3, "Distance", "I", "meters"),
-    4:Sample.partial(4, "Speed", "H", "m/s", scale=0.01, ignore=65535),
+    3:Sample.partial(3, "Distance", "I", "meters"), #<
+    4:Sample.partial(4, "Speed", "H", "m/s", scale=0.01, ignore=65535), #<
     5:Sample.partial(5, "HR", "B", "bpm", ignore=255),
-    # 6:Sample.partial(6, "Time", "I", "ms"),
-    6:lambda x: TimeField().read(x),
+    6:Sample.partial(6, "Time", "I", "ms"),
     7:Sample.partial(7, "GPSSpeed", "H", "m/s", scale=0.01),
     8:Sample.partial(8, "WristAccSpeed", "H", "m/s", scale=0.01),
     9:Sample.partial(9, "BikePodSpeed", "H", "m/s", scale=0.01),
@@ -249,17 +386,18 @@ sample_lookup = { # the one-off samples?
     14:Sample.partial(14, "EnergyConsumption", "H", "hcal/min"),
     15:Sample.partial(15, "Temperature", "h", "celsius", 0.1, (-100,100)),
     16:Sample.partial(16, "BatteryCharge", "B", "%"),
-    17:Sample.partial(17, "GPSAltitude", "I", "meters", 0.01, (-1000,15000)),
+    17:Sample.partial(17, "GPSAltitude", "i", "meters", 0.01, (-1000,15000)),
     18:Sample.partial(18, "GPSHeading", "H", "degrees", 0.01, (0,360), ignore=65535),
     19:Sample.partial(19, "GpsHDOP", "B", ignore=255),
     20:Sample.partial(20, "GpsVDOP", "B", ignore=255),
     21:Sample.partial(21, "WristCadence", "H", "rpm", ignore=65535),
     22:Sample.partial(22, "SNR", "16c"),
     23:Sample.partial(23, "NumberOfSatellites", "B", ignore=255),
-    24:Sample.partial(24, "SeaLevelPressure", "h", "hpa", 0.01),
-    25:Sample.partial(25, "VerticalSpeed", "h", "m/s", 0.01),
+    24:Sample.partial(24, "SeaLevelPressure", "h", "hpa", 0.1),
+    25:Sample.partial(25, "VerticalSpeed", "h", "m/s", 0.01), #<
     26:Sample.partial(26, "Cadence", "B", "rpm", ignore=255),
 }
+"""
 
 class DataStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
     _pack_ = 1
@@ -267,18 +405,14 @@ class DataStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
 
 class GpsUserData(DataStructure):
     _fields_ = [
-                ("Time", TimeField), # 4, 4
-                ("latitude", LatitudeField), # 4 , 8
-                ("longitude", LongitudeField),# 4, 12
-                ("gpsaltitude", ctypes.c_int16), # 2, 14
-                ("gpsheading", GPSHeadingField),# 2, 16
-                ("EHPE", ctypes.c_uint8), #1, 17
+                ("Time", TimeField),
+                ("latitude", LatitudeField),
+                ("longitude", LongitudeField),
+                ("gpsaltitude", ctypes.c_int16),
+                ("gpsheading", GPSHeadingField),
+                ("EHPE", ctypes.c_uint8),
                 ]
 
-
-#\x03\x17\x02\x00\x00\x0c
-#\xe0\x07\t\x18\x17:\x06
-#\xe0\x07\t\x18\x13\r\x07
 class TimeBlock(DataStructure):
     _fields_ = [
                 ("year", ctypes.c_uint16),
@@ -294,13 +428,20 @@ class TimeReference(DataStructure):
                 ("UTC",  TimeBlock)
                 ]
 
+
+class VelocityFieldKmH(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint16),]
+    scale = 0.01 / 3.6
+    unit = "m/s"
+
+
 class TrackHeader(DataStructure):
     _fields_ = [("time", TimeBlock), # sure
                 ("interval_SPECULATED", ctypes.c_uint16),
                 ("duration", DurationField), # sure
                 ("_", ctypes.c_uint8*14), # ??
-                ("velocity_avg", VelocityField), # sure
-                ("velocity_max", VelocityField), # sure
+                ("velocity_avg", VelocityFieldKmH), # sure
+                ("velocity_max", VelocityFieldKmH), # sure
                 ("altitude_min", ctypes.c_int16),
                 ("altitude_max", ctypes.c_int16),
                 ("heartrate_avg", ctypes.c_uint8),
@@ -316,7 +457,80 @@ class TrackHeader(DataStructure):
 ]
     _anonymous_ = ["time"]
 
-    
+class VariableLengthField():
+    def __init__(self, blob):
+        # self.data = ctypes.c_uint8 * int(len(blob))
+        self.data = ctypes.create_string_buffer(len(blob))
+
+    @classmethod
+    def read(cls, byte_object):
+        a = cls(byte_object)
+        ctypes.memmove(ctypes.addressof(a.data), bytes(byte_object),
+                       min(len(byte_object), ctypes.sizeof(a.data)))
+        return a
+
+    def __iter__(self):
+        yield ("raw", self.data.value)
+        yield ("key", self.key)
+
+class FallbackField(VariableLengthField):
+    key = "unknown_field"
+
+class GPSTestField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint8*16),]
+    key = "gps_test"
+
+class GPSDataField(VariableLengthField):
+    key = "gpsdata"
+
+class GPSAccuracyField(VariableLengthField):
+    key = "accdata"
+
+
+class LogPauseField(FieldEntry):
+    key = "logpause"
+
+class LogRestartField(FieldEntry):
+    key = "logrestart"
+
+class IBIDataField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint8*64),]
+    key = "ibidata"
+
+class TTFFField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint16),]
+    scale = 0.1
+    unit = "s"
+    key = "ttff"
+
+class DistanceSourceField(Uint8ByteIgnored255Field):
+    key = "distancesource"
+
+class LapInfoField(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint16 * 23),]
+    key = "lapinfo"
+
+class GPSTestData(FieldEntry):
+    _fields_ = [("field_", ctypes.c_uint8*61),]
+    key = "gpstestdata"
+
+
+
+episodic_types = {
+    1:GPSTestField,
+    2:GPSDataField,
+    3:GPSAccuracyField,
+    4:LogPauseField,
+    5:LogRestartField,
+    6:IBIDataField,
+    7:TTFFField,
+    8:DistanceSourceField,
+    9:LapInfoField,
+    10:GpsUserData,
+    11:GPSTestData,
+    12:TimeReference,
+}
+"""
 episodic_lookup = {
     1:Sample.partial(1, "GPS test", "16c"),
     2:Sample.partial(2, "gpsdata", "x"), # length:?
@@ -333,9 +547,8 @@ episodic_lookup = {
     # 12:Sample.partial(12, "timeref", "14c"),
     12:lambda x: TimeReference.read(x),
 }
-
 SampleFallback = Sample.partial(0, "Unknown", "")
-
+"""
 
 class MEMfs():
     # contains the entire filesystem.
@@ -432,9 +645,8 @@ class PMEMEntries():
         self.retrieved_entry_count = 0
 
     def get_entry(self):
-        # print("Retrieving entry at: {:0>8X}".format(self.pos))
         self.retrieved_entry_count += 1
-        # everything is an entry headers are too!
+        # everything is an entry: headers are too!
         length, = struct.unpack("<H", self.block.file[self.pos:self.pos+2])
         self.pos += 2
 
@@ -450,11 +662,13 @@ class PMEMEntries():
         # print(res)
         return res
 
+    def get_entries(self):
+        return self.entries
 
 
 class PMEMTrackEntries(PMEMEntries):
-    periodic_entries = []
     header_metadata = None
+    periodic_entries = []
 
     def load_header(self):
         # should contain the periodic specification
@@ -465,7 +679,7 @@ class PMEMTrackEntries(PMEMEntries):
         self.header_metadata_bytes = self.get_entry()
         self.process_entry(self.header_metadata_bytes)
         if (self.header_metadata is None):
-            print("No metadata found!!!")
+            return False
 
         # No clue... \x03\x82\x00\x00\x00\x04
         self.header_unknown1 =  self.get_entry()
@@ -475,16 +689,14 @@ class PMEMTrackEntries(PMEMEntries):
         self.header_unknown2 =  self.get_entry()
         self.process_entry(self.header_unknown2)
 
+        return True
+
 
     def process_entry(self, entry_bytes):
-        # print(entry_bytes)
         pos = 0
         entry_type, pos = self.parse("B", entry_bytes, pos)
-        # print("processing, entry_type: {} bytes: {}".format(entry_type, str(entry_bytes)))
-        # entry_type is either 2 or 3. 2 Indicates periodic, as set by the
-        # header, 3 means it is determines by the subtype field.
 
-        # print(entry_type)
+        # Defines the entries of the periodic type.
         if (entry_type == 0):
             pos = 0
             periodic_count, pos = self.parse("H", entry_bytes, pos)
@@ -496,9 +708,22 @@ class PMEMTrackEntries(PMEMEntries):
             #: \x04\x00\x06\x00\x02\x00
             #: \x06\x00\x08\x00\x04\x00
             self.periodic_entries = []
+            field_list = []
+            anonymous_fields = []
             for p in range(periodic_count):
                 type, offset, length, pos = self.parse("HHH", entry_bytes, pos)
                 self.periodic_entries.append((type, offset, length))
+                field_list.append((sample_types[type].key, sample_types[type]))
+                anonymous_fields.append(sample_types[type].key)
+
+            print(field_list)
+            # next, we craft our periodicStructure:
+            class periodicStructure(DataStructure):
+                _fields_ = field_list
+                # _anonymous_ = anonymous_fields
+
+            self.periodic_structure = periodicStructure
+                
             return None
 
         if (entry_type == 1):
@@ -510,46 +735,55 @@ class PMEMTrackEntries(PMEMEntries):
         if (entry_type == 2):
             samples = []
             # parse it according to the periodic entries.
-            for sample_type, offset, length in self.periodic_entries:
-                sample = sample_lookup.get(sample_type, SampleFallback)
-                samples.append(sample(entry_bytes[pos+offset:pos+offset+length]))
+            # for sample_type, offset, length in self.periodic_entries:
+                # sample = sample_lookup.get(sample_type, SampleFallback)
+                # samples.append(sample(entry_bytes[pos+offset:pos+offset+length]))
             # print(" ".join([str(a) for a in samples]))
-            return EpisodicSamples(*samples)
+            # print(self.periodic_structure.read(entry_bytes[pos:]))
+            # return EpisodicSamples(*samples)
+            return self.periodic_structure.read(entry_bytes[pos:])
 
+        # Episodic type
         if (entry_type == 3):
             timestamp, pos = self.parse("I", entry_bytes, pos)
             episode_type, pos = self.parse("B", entry_bytes, pos)
-            # print("Episodic type: {}".format(episode_type))
-            sample = episodic_lookup.get(episode_type, SampleFallback)
-            # print("Remainder bytes (len:{}): {}".format(len(entry_bytes[pos:]),entry_bytes[pos:]))
-            processed = sample(entry_bytes[pos:])
-            # print(str(processed))
+            sample = episodic_types.get(episode_type, FallbackField)
+            processed = sample.read(entry_bytes[pos:])
             return processed
 
 
-    def load_entries(self, max=100):
+    def load_entries(self):
         if (self.header_metadata is not None):
             for i in range(self.header_metadata.samples-self.retrieved_entry_count):
                 processed = self.process_entry(self.get_entry())
                 # print(processed)
                 self.entries.append(processed)
 
-    def get_entries(self):
-        return self.entries
+
+class InternalLogEntry:
+    def __init__(self, mtype, header, time, identifier, text):
+        self.header = header
+        self.type = mtype
+        self.time = time
+        self.identifier = identifier
+        self.text = text
+
+    def __str__(self):
+        return "t: {: >10d}, (0x{:0>8X}), {}".format(self.time, self.identifier, self.text)
+        
 
 class PMEMLogEntries(PMEMEntries):
+
     def load_header(self):
-        self.header_log1 = self.get_entry()
-        print(self.header_log1)
-        print(TimeBlock.read(self.header_log1[5:]))
-        # self.header_log2 = self.get_entry()
-        # print(self.header_log2)
-        #02 00 00 00 00 DC 07 01 01 00 00 00
+        self.header_bytes = self.get_entry()
+        self.header = TimeBlock.read(self.header_bytes[5:])
+        return True
 
     def process_entry(self, entry_bytes):
         pos = 0
 
         entry_type, pos = self.parse("B", entry_bytes, pos)
+
         # print("\033[1;90m{0}\033[00m".format(" ".join(["{:0>2X}".format(b) for b in entry_bytes])))
         # print("{}".format(" ".join(["{:0>2X}".format(b) for b in entry_bytes])))
         # print(str(entry_bytes))
@@ -557,15 +791,21 @@ class PMEMLogEntries(PMEMEntries):
         if (entry_type == 5):
             # Seriously, what's up with the change in endianness for timestamp?
             timestamp, = struct.unpack("<I", entry_bytes[pos:pos+4])
-            some_type_identifier, pos = self.parse("Ix", entry_bytes, pos+4)
+            identifier, pos = self.parse("Ix", entry_bytes, pos+4)
             try:
                 text = entry_bytes[pos:].decode('ascii')
             except UnicodeDecodeError:
                 text = str(entry_bytes[pos:])
-            print("entry_type: {} : t: {: >10d}, (0x{:0>8X}), {}".format(entry_type, timestamp, some_type_identifier, text))
+            # print("entry_type: {} : t: {: >10d}, (0x{:0>8X}), {}".format(entry_type, timestamp, identifier, text))
+            entry = InternalLogEntry(entry_type, self.header, timestamp, identifier, text)
+            return entry
 
         if (entry_type == 3):
-            print("entry_type: {} : No clue {}".format(entry_type, " ".join(["{:0>2X}".format(b) for b in entry_bytes])))
+            # print("entry_type: {} : No clue {}".format(entry_type, " ".join(["{:0>2X}".format(b) for b in entry_bytes])))
+            text = " ".join(["{:0>2X}".format(b) for b in entry_bytes[1:]])
+            entry = InternalLogEntry(entry_type, self.header, 0, 0, text)
+            return entry
+            
             
         # return True
 
@@ -575,7 +815,9 @@ class PMEMLogEntries(PMEMEntries):
             data = self.get_entry()
             if (not data):
                 break
-            self.process_entry(data)
+            processed = self.process_entry(data)
+            # print(processed)
+            self.entries.append(processed)
 
 
 class PMEMTrack(PMEMBlock):
@@ -583,23 +825,6 @@ class PMEMTrack(PMEMBlock):
 
 class PMEMInternalLog(PMEMBlock):
     pmem_type = PMEMLogEntries
-
-
-
-
-"""
-    Internal log:
-                                    12
-50 4D 45 4D 45 32 09 00 D2 27 09 00 0C 00
-                                    33
-02 00 00 00 00 DC 07 01 01 00 00 00 21 00                                                          33
-05 17 00 00 00 50 00 1D 03 00 56 65 72 73 69 6F 6E 3A 31 2E 36 2E 33 39 20 56 6C 74 3A 31 30 30 00 21
-00 05 76 11 00 00 81 00 B3 03 00 61 63 74 69 76 65 53 65 6E 73 65 49 64 3A 30 20 41 4C 54 49 20 30 00 19 00 05 39 21 00 00
-
-
-50 4D 45 4D FD 45 0F 00 52 42 0F 00 1B 00 00 04
-00 19 00 00 00 02 00 03 00 02 00 04 00 04 00 06 00 02 00 06 00 08 00 04 00 69 00 01 E0 07 0A 11 00 1D 1D 01 00 B7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F8 00 FF 7F 00 80 00 00 00 03 47 50 53 20 50 4F 44 00 00 00 00 00 00 00 00 00 00 64 9C 00 00 00 00 2A 00 00 00 00 00 FF FF 01 00 BE 41 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06 00 03 82 00 00 00 04 06 00 03 83 00 00 00 05 0D 00 02 00 00 00 00 00 00 FF FF 0F 00 00 00 14 00 03 5C 01 00 00 0C E0 07 0A 11 00 1D 1D E0 07 0A 10 11 3B 1E 0D 00 02 00 00 00 00 00 00 00 00 3E 03 00 00 17 00 03 ED 01 00 00 0A E8 03 00 00 73 1B 24 1F F2 BC 14 04 23 00 AF 2C 12 07 00 03 C0 03 00 00 08 01 0D 00 02 00 00 00 00 00 00 00 00 5A 07 00 00 17 00 03 E0 01 00 00 0A D0 07 00 00 75 1B 24 1F F1 BC 14 04 23 00 AF 2C 12 0D 00 02 00 00 00 00 00 00 00 00 0E 0B 00 00 17 00 03 ED 01 00 00 0A B8 0B 00 00 77 1B 24 1F EF BC 14 04 23 00 AF 2C 12 0D 00 02 00 00 00 00 00 00 00 00 02 0F 00 00 17 00 03 E0 01 00 00 0A A0 0F 00 00 79 1B 24 1F EE BC 14 04 23 00 AF 2C 0F 0D 00 02 00 00 00 00 00 00 00 00 DE 12 00 00 17 00 03 EC 01 00 00 0A 88 13 00 00 7A 1B 24 1F EF BC 14 04 23 00 AF 2C 0F 0D 00 02 00 00 00 00 00 00 00 00 D2 16 00 00 17 00 03 E0 01 00 00 0A 70 17 00 00 7A 1B 24 1F
-"""
 
 
 if __name__ == "__main__":
@@ -614,7 +839,8 @@ if __name__ == "__main__":
     data.tracks.load_logs()
     print(data.tracks.logs)
     for track in data.tracks.logs:
-        track.load_header()
+        if not track.load_header():
+            continue
         track.load_entries()
 
     for track in data.tracks.logs:
@@ -623,12 +849,16 @@ if __name__ == "__main__":
         for sample in samples[:15]:
             print(sample)
 
-    # sys.exit()
+    sys.exit()
     data.log.load_block_header()
     data.log.load_logs()
     for log in data.log.logs:
-        log.load_header()
+        if not log.load_header():
+            continue
         log.load_entries()
+        samples = log.get_entries()
+        for sample in samples[:15]:
+            print(sample)
         
     # for j in range(10):
         # entry = data.tracks.logs[0].get_entry()
