@@ -23,7 +23,7 @@
 # SOFTWARE.
 
 from . import protocol
-from .interact import Communicator
+from .interact import Communicator, RecordingCommunicator
 import argparse
 import time
 import sys
@@ -35,6 +35,9 @@ Cmd = namedtuple("Cmd", ["request", "help"])
 parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
 parser.add_argument('--verbose', '-v', help="Print all communication.",
                     action="store_true", default=False)
+
+parser.add_argument('--record', help="Record usb packets to aid debugging and\
+                    analysis.", default=True)
 
 subparsers = parser.add_subparsers(dest="command")
 
@@ -64,6 +67,8 @@ dump_rom.add_argument('--file', type=str, default="/tmp/dump.bin",
 # parse the arguments.
 args = parser.parse_args()
 
+communicator_class = RecordingCommunicator if args.record else Communicator
+
 # no command
 if (args.command is None):
     parser.print_help()
@@ -73,7 +78,7 @@ if (args.command is None):
 # single command.
 if (args.command in single_commands):
     spec = single_commands[args.command]
-    c = Communicator()
+    c = communicator_class()
     c.connect()
     req = spec.request()
     c.write_msg(req)
@@ -82,7 +87,7 @@ if (args.command in single_commands):
 if (args.command == "dump"):
     up_to_block = max(min(int(0x3c0000 / 0x0200), int(args.upto)), 0)
     print("Up to {:>04X} (decimal: {:>04d}).".format(up_to_block, up_to_block))
-    c = Communicator()
+    c = communicator_class()
     c.connect()
     p = protocol.DataRequest()
     f = open(args.file, "bw")
@@ -95,7 +100,7 @@ if (args.command == "dump"):
         c.write_msg(p)
         ret_packet = c.read_msg()
         if (type(ret_packet) == protocol.DataReply):
-            print("Successfully retrieved {:s}".format(ret_packet))
+            # print("Successfully retrieved {:s}".format(ret_packet))
             i += 1
             f.write(ret_packet.content())
         else:
@@ -106,3 +111,6 @@ if (args.command == "dump"):
         sequence_number += 1
         
     f.close()
+
+c.write_json("/tmp/risntreist.json")
+c.write_json("/tmp/risntreist.json.gz")

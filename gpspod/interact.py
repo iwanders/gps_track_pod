@@ -29,8 +29,16 @@ import usb.util
 import sys
 import time
 
+# to export the communication
+import json
+import gzip
+import base64
 
 class Communicator():
+    write_endpoint = 0x02
+    read_endpoint = 0x82
+    usb_packetlength = 64
+
     def __init__(self):
         self.dev = None
         self.incoming = protocol.USBPacketFeed()
@@ -56,10 +64,12 @@ class Communicator():
         # set the active configuration. With no arguments, the first
         # configuration will be the active one
         self.dev.set_configuration()
+
+        # clean up any packets left in the delivery queue...
         res = True
         while(res):
             try:
-                res = self.dev.read(0x82, 64)
+                res = self.dev.read(self.read_endpoint, self.usb_packetlength)
             except usb.core.USBError:
                 break
 
@@ -71,27 +81,61 @@ class Communicator():
     def print_device(self):
         cfg = self.dev.get_active_configuration()
         intf = cfg[(0, 0)]
-        print("print cfg")
-        print(cfg)
-        print("print intf")
-        print(intf)
 
     def write_msg(self, msg):
         msg.command.packet_sequence = self.sequence_number
         self.sequence_number += 1
+        # create the necessary USB packets and write these to the device.
         packets = protocol.usbpacketizer(msg)
         for p in packets:
-            write_res = self.dev.write(0x02, bytes(p))
+            self.write_packet(p)
 
     def read_msg(self, timeout=1000):
         start = time.time()
         while (start + timeout / 1000.0) > time.time():
-            res = self.dev.read(0x82, 64)
+            res = self.read_packet()
             msg_res = self.incoming.packet(protocol.USBPacket.read(res))
             if msg_res:
                 return protocol.load_msg(msg_res)
         return None
 
+    def write_packet(self, packet):
+        write_res = self.dev.write(self.write_endpoint, bytes(packet))
+        return write_res
+
+    def read_packet(self):
+        res = self.dev.read(self.read_endpoint, self.usb_packetlength)
+        return res
+
+class RecordingCommunicator(Communicator):
+    def __init__(self):
+        self.incoming_packets = []
+        self.outgoing_packets = []
+        super().__init__()
+
+    def write_packet(self, packet):
+        self.outgoing_packets.append((time.time(), bytes(packet)))
+        return super().write_packet(packet)
+
+    def read_packet(self):
+        read_res = super().read_packet()
+        if (read_res):
+            self.incoming_packets.append((time.time(), bytes(read_res)))
+        return read_res
+
+    def transactions(self):
+        incoming_processed = []
+        outgoing_processed = []
+        for t, v in self.incoming_packets:
+            incoming_processed.append((t, base64.b64encode(v).decode('ascii')))
+        for t, v in self.outgoing_packets:
+            outgoing_processed.append((t, base64.b64encode(v).decode('ascii')))
+        return {"incoming":incoming_processed, "outgoing":outgoing_processed}
+
+    def write_json(self, path):
+        opener = gzip.open if path.endswith(".gz") else open
+        with opener(path, "wt") as f:
+            json.dump(self.transactions(), f)
 
 if __name__ == "__main__":
     req = protocol.DeviceInfoRequest()
