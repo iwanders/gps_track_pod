@@ -115,6 +115,7 @@ class Communicator():
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
 
+
 class RecordingCommunicator(Communicator):
     def __init__(self, path=None):
         self.save_path = path
@@ -139,12 +140,12 @@ class RecordingCommunicator(Communicator):
             incoming_processed.append((t, base64.b64encode(v).decode('ascii')))
         for t, v in self.outgoing_packets:
             outgoing_processed.append((t, base64.b64encode(v).decode('ascii')))
-        return {"incoming":incoming_processed, "outgoing":outgoing_processed}
+        return {"incoming": incoming_processed, "outgoing": outgoing_processed}
 
     def write_json(self, path=None):
-        if (path == None):
+        if (path is None):
             path = self.save_path
-        if (path != None):
+        if (path is not None):
             opener = gzip.open if path.endswith(".gz") else open
             with opener(path, "wt") as f:
                 json.dump(self.transactions(), f)
@@ -159,4 +160,3 @@ if __name__ == "__main__":
     c.connect()
     c.write_msg(req)
     print("{:s}".format(c.read_msg()))
-

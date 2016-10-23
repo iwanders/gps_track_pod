@@ -31,15 +31,15 @@ import os
 
 
 def get_communicator(args):
-    # time.strftime(format[, t])
-    if (args.recordpath == None):
+    if (args.recordfile is None):
         recordpath = time.strftime("%Y_%m_%d_%H_%M_%S.json.gz")
     else:
-        recordpath = args.recordpath
+        recordpath = args.recordfile
     if (args.record):
         return RecordingCommunicator(recordpath)
     else:
         return Communicator()
+
 
 def run_device_info(args):
     communicator = get_communicator(args)
@@ -65,13 +65,44 @@ def run_debug_view_messages(args):
     from .debug import print_interaction
     print_interaction(args.file)
 
+
+def run_debug_retrieve_fs(args):
+    communicator = get_communicator(args)
+    up_to_block = max(min(int(0x3c0000 / 0x0200), int(args.upto)), 0)
+    with communicator:
+        p = protocol.DataRequest()
+        f = open(args.file, "bw")
+        sequence_number = 0
+        error_count = 0
+        i = 0
+        while (i < up_to_block) and (error_count < 10):
+            sys.stdout.write(
+                "Retrieve: 0x{:0>8X}/0x{:0>8X}\r".format(
+                        i*p.block_size, up_to_block*p.block_size))
+            sys.stdout.flush()
+            p.pos(i * p.block_size)
+            communicator.write_msg(p)
+            ret_packet = communicator.read_msg()
+            if (type(ret_packet) == protocol.DataReply):
+                i += 1
+                f.write(ret_packet.content())
+            else:
+                error_count += 1
+                print("Wrong packet response: {:s}".format(ret_packet))
+                print("Will retry this block: {:>0X}"
+                      ", current_error count: {}".format(i, error_count))
+            time.sleep(0.01)
+            sequence_number += 1
+
+        f.close()
+
 # argument parsing
 parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
 parser.add_argument('--verbose', '-v', help="Print all communication.",
                     action="store_true", default=False)
 parser.add_argument('--record', help="Record usb packets to aid debugging and\
                     analysis.", default=True)
-parser.add_argument('--recordpath', help="Default file to record to"
+parser.add_argument('--recordfile', help="Default file to record to"
                     " (%%Y_%%m_%%d_%%H_%%M_%%S.json.gz)",
                     default=None)
 
@@ -115,6 +146,16 @@ debug_reconstruct_fs.add_argument(
                     'INPUTFILE.binfs')
 debug_reconstruct_fs.set_defaults(func=run_debug_reconstruct_fs)
 
+debug_retrieve_fs = debug_subcommand.add_parser(
+                        "retrieve",
+                        help="Pull all bytes from the filesystem")
+debug_retrieve_fs.add_argument('file',
+                               type=str,
+                               help='The file to write to.')
+debug_retrieve_fs.add_argument('--upto', type=int, default=0x3c0000,
+                               help="Retrieve up to this address (0x3c0000)")
+debug_retrieve_fs.set_defaults(func=run_debug_retrieve_fs)
+
 
 args = parser.parse_args()
 
@@ -137,36 +178,3 @@ if (args.command == "debug"):
 
 args.func(args)
 sys.exit()
-
-
-
-if (args.command == "dump"):
-    up_to_block = max(min(int(0x3c0000 / 0x0200), int(args.upto)), 0)
-    print("Up to {:>04X} (decimal: {:>04d}).".format(up_to_block, up_to_block))
-    c = communicator_class()
-    c.connect()
-    p = protocol.DataRequest()
-    f = open(args.file, "bw")
-    sequence_number = 0
-    error_count = 0
-    # for i in range(up_to_block):
-    i = 0
-    while (i < up_to_block) and (error_count < 10):
-        p.pos(i * p.block_size)
-        c.write_msg(p)
-        ret_packet = c.read_msg()
-        if (type(ret_packet) == protocol.DataReply):
-            # print("Successfully retrieved {:s}".format(ret_packet))
-            i += 1
-            f.write(ret_packet.content())
-        else:
-            error_count += 1
-            print("Wrong packet response: {:s}".format(ret_packet))
-            print("Will retry this block: {:>0X}, current_error count: {}".format(i, error_count))
-        time.sleep(0.01)
-        sequence_number += 1
-        
-    f.close()
-
-    c.write_json("/tmp/risntreist.json")
-    c.write_json("/tmp/risntreist.json.gz")
