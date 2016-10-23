@@ -23,7 +23,7 @@
 # SOFTWARE.
 
 from . import protocol
-from .interact import Communicator, RecordingCommunicator
+from .interact import Communicator, RecordingCommunicator, OfflineCommunicator
 import argparse
 import time
 import sys
@@ -36,11 +36,26 @@ def get_communicator(args):
         recordpath = time.strftime("%Y_%m_%d_%H_%M_%S.json.gz")
     else:
         recordpath = args.recordfile
+
+    if (args.fs is not None):
+        return OfflineCommunicator()
+
     if (args.record):
         return RecordingCommunicator(recordpath)
     else:
         return Communicator()
 
+def get_device(args, communicator):
+    if (args.fs is not None):
+        # load it
+        with open(args.fs, "rb") as f:
+            fs = f.read()
+    else:
+        fs = None
+    gps = device.GpsPod(communicator)
+    gps.mount(fs)
+    return gps
+    
 
 def run_device_info(args):
     communicator = get_communicator(args)
@@ -51,11 +66,38 @@ def run_device_info(args):
 
 def run_debug_dev_func(args):
     communicator = get_communicator(args)
+    gps = get_device(args, communicator)
     with communicator:
-        gps = device.GpsPod(communicator)
         print(gps[0:100])
-        gps.mount()
         gps.load_logs()
+
+def run_show_tracks(args):
+    communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    with communicator:
+        gps.load_tracks()
+        tracklist = gps.get_tracks()
+        for i in range(len(tracklist)):
+            print("{: >2d}: {}".format(i, tracklist[i].get_header()))
+
+def run_retrieve_tracks(args):
+    if (args.outfile is None):
+        output_path = time.strftime("%Y_%m_%d_%H_%M_%S.gpx")
+    else:
+        output_path = args.outfile
+    communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    with communicator:
+        gps.load_tracks()
+        tracklist = gps.get_tracks()
+        for i in range(len(tracklist)):
+            print("{: >2d}: {}".format(i, tracklist[i].get_header()))
+        print("Retrieving track {: >2d} and writing to {}".format(args.index, output_path))
+        track = tracklist[args.index]
+        track.load_entries()
+        samples = track.get_entries()
+        for j in samples:
+            print(dict(j))
 
 
 def run_debug_reconstruct_fs(args):
@@ -116,20 +158,26 @@ parser.add_argument('--recordfile', help="Default file to record to"
                     " (%%Y_%%m_%%d_%%H_%%M_%%S.json.gz)",
                     default=None)
 
+parser.add_argument('--fs', help="Specify a filesystem file to use.",
+                    default=None)
+
 subparsers = parser.add_subparsers(dest="command")
 
 
 device_info = subparsers.add_parser("info", help="Print device info")
 device_info.set_defaults(func=run_device_info)
 
+show_tracks = subparsers.add_parser("tracks", help="Show available tracks")
+show_tracks.set_defaults(func=run_show_tracks)
 
-"""
-dump_rom = subparsers.add_parser("dump", help="Make a dump of some memory")
-dump_rom.add_argument('-upto', type=int, default=int(0x3c0000 / 0x0200),
-                      help='number of blocks to retrieve')
-dump_rom.add_argument('--file', type=str, default="/tmp/dump.binfs",
-                      help='file to write to')
-"""
+retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track")
+retrieve_tracks.add_argument('index', type=int,
+                                 help='The index of the track to download')
+retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
+                    help='The output file for FS, defaults to: '
+                    '%%Y_%%m_%%d_%%H_%%M_%%S.gpx')
+retrieve_tracks.set_defaults(func=run_retrieve_tracks)
+
 
 
 # create subparser for debug
@@ -165,7 +213,6 @@ debug_retrieve_fs.add_argument('file',
 debug_retrieve_fs.add_argument('--upto', type=int, default=0x3c0000,
                                help="Retrieve up to this address (0x3c0000)")
 debug_retrieve_fs.set_defaults(func=run_debug_retrieve_fs)
-
 
 
 debug_dev_func = debug_subcommand.add_parser("test")

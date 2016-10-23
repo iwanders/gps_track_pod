@@ -118,8 +118,11 @@ class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
     def value(self):
         # works on self.field_
 
-        # check if we ignore it.
-        if (self.field_ == self.ignore):
+        if (hasattr(self, "field_")):
+            # check if we ignore it.
+            if (self.field_ == self.ignore):
+                return None
+        else:
             return None
 
         # next we convert the value.
@@ -361,6 +364,11 @@ class TrackHeader(DataStructure):
 ]
     _anonymous_ = ["time"]
 
+    def __str__(self):
+        return "{year}-{month}-{day} {hour:0>2}:{minutes:0>2}:{seconds:0>2} "\
+            "distance: {distancevalue: >5}m, samples: {samples: >6}, interval:  {interval_SPECULATED: >1}s".format(
+                    distancevalue=self.distance.value, **dict(self))
+
 class VariableLengthField(DataStructure):
     def __init__(self, blob):
         # self.data = ctypes.c_uint8 * int(len(blob))
@@ -369,7 +377,7 @@ class VariableLengthField(DataStructure):
     @classmethod
     def read(cls, byte_object):
         a = cls(byte_object)
-        print(byte_object)
+        #print(byte_object)
         ctypes.memmove(ctypes.addressof(a.data), bytes(byte_object),
                        min(len(byte_object), ctypes.sizeof(a.data)))
         return a
@@ -474,8 +482,6 @@ class MEMfs():
     def __getitem__(self, key):
         return self.backend[key]
 
-
-
 class BPMEMfile():
     # contains the BPMEM.DAT file, that is; the thing that has the correct offsets.
     offset = 0xba00
@@ -531,12 +537,13 @@ class PMEMBlock():
         current_position = self.header.first
         
         for i in range(0, self.header.entries):
-            print("Reading at: 0x{:0>6X}".format(current_position))
+            #print("Reading at: 0x{:0>6X}".format(current_position))
             log_header = PMEMSubBlockHeader.read(self.file[current_position:current_position+ctypes.sizeof(PMEMSubBlockHeader)])
 
             if (log_header.next == current_position):
-                print("Done")
-            print(log_header)
+                #print("Done")
+                pass
+            #print(log_header)
             self.logs.append(self.pmem_type(self, current_position+ctypes.sizeof(PMEMSubBlockHeader), log_header))
             # self.logs.append({"entry":this_entry, "pos":current_position, "header_pos":current_position+ctypes.sizeof(PMEMSubBlockHeader)})
             current_position = log_header.next
@@ -585,6 +592,9 @@ class PMEMEntries():
 class PMEMTrackEntries(PMEMEntries):
     header_metadata = None
     periodic_entries = []
+
+    def get_header(self):
+        return self.header_metadata
 
     def load_header(self):
         # should contain the periodic specification
@@ -637,7 +647,7 @@ class PMEMTrackEntries(PMEMEntries):
                     key = "field_type_0x{:0>2X}".format(type)
                     field_list.append((key,  VariableLengthField.fixed_length(clskey=key, length=length)))
 
-            print(field_list)
+            #print(field_list)
             # next, we craft our periodicStructure:
             class periodicStructure(DataStructure):
                 _fields_ = field_list

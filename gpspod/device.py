@@ -35,6 +35,8 @@ class GpsPod:
         self.memfs = None
         self.data = None
 
+        self.tracks = []
+
     def transfer_block(self, block_index, retry_count=10):
         p = protocol.DataRequest()
         error_count = 0
@@ -79,19 +81,26 @@ class GpsPod:
         else:
             raise IndexError("Could not get data") # TODO: Use a proper error?
 
-    def mount(self):
-        self.memfs = pmem.MEMfs(self)
-        self.data = pmem.BPMEMfile(self.memfs)
+    def mount(self, fs=None):
+        if (fs is None):
+            self.memfs = pmem.MEMfs(self)
+            self.data = pmem.BPMEMfile(self.memfs)
+        else:
+            # assume it is a complete filesystem.
+            self.retrieved_fs = bytes([1 for i in range(pmem.FILESYSTEM_SIZE)])
+            self.memfs = pmem.MEMfs(fs)
+            self.data = pmem.BPMEMfile(self.memfs)
+            
 
-    def load_logs(self):
+    def load_tracks(self):
         self.data.tracks.load_block_header()
         self.data.tracks.load_logs()
-        print(" ".join([str(l) for l in self.data.tracks.logs]))
+        # print(" ".join([str(l) for l in self.data.tracks.logs]))
 
         for track in self.data.tracks.logs:
-            if not track.load_header():
-                continue
-            # track.load_entries()
+            if track.load_header():
+                self.tracks.append(track)
 
-        for track in self.data.tracks.logs:
-            print("\n\nNew track {}".format(track.header_metadata))
+    def get_tracks(self):
+        return self.tracks
+

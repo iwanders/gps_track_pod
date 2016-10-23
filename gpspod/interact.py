@@ -154,6 +154,23 @@ class RecordingCommunicator(Communicator):
         self.write_json()
         return super().__exit__(*args, **kwargs)
 
+# this one should be able to use a transaction log...
+class OfflineCommunicator(Communicator):
+    def write_packet(self, packet):
+        return True
+
+    def read_packet(self):
+        return b''
+
+    def connect(self):
+        pass
+
+    def close(self):
+        pass
+
+
+
+
 if __name__ == "__main__":
     req = protocol.DeviceInfoRequest()
     c = Communicator()
