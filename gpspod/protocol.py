@@ -334,59 +334,22 @@ class BodyLogHeaderStep(ctypes.LittleEndianStructure, Dictionary):
         return "Step: {}".format(self.step)
 
 
-class BodyHeaderSummary(ctypes.LittleEndianStructure, Dictionary):
+class BodyLogHeaderEntry(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
-        ("_", ctypes.c_uint8),
-        ("year", ctypes.c_uint16),
-        ("month", ctypes.c_uint8),
-        ("day", ctypes.c_uint8),
-        ("hour", ctypes.c_uint8),
-        ("minute", ctypes.c_uint8),
-        ("seconds", ctypes.c_uint8),
-    ]
-
-
-class BodyHeaderSamples(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("b", ctypes.c_uint8*130)
-    ]
-
-    def __str__(self):
-        return " ".join(["{:>02X}".format(a) for a in self.b])
-
-
-class Body_Header_(ctypes.Union):
-    _fields_ = [("samples", BodyHeaderSamples),
-                ("summary", BodyHeaderSummary),
-                ("raw", ctypes.c_uint8*130)
-                ]
-
-
-class BodyLogHeaderFormat(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("_", ctypes.c_uint16),
+        ("type", ctypes.c_uint16),
         ("header_part", ctypes.c_uint16),
         ("length", ctypes.c_uint32),
-        ("header", Body_Header_),
+        ("data", ctypes.c_uint8*MAX_PACKET_SIZE),
     ]
 
     def __str__(self):
-        return str(self.header.samples)
-        if (self.header_part == 1):
-            # print(" ".join(["{:>02X}".format(a) for a in self.header.raw]))
-            return str(self.header.samples)
-        if (self.header_part == 2):
-            # print(" ".join(["{:>02X}".format(a) for a in self.header.raw]))
-            return str(self.header.summary)
-        return "Unknown log: part: {}, len: {} ({})".format(
-                self.header_part, self.length, " ".join(
-                    ["{:>02X}".format(a) for a in self.header.raw]))
-"""
-This header is not yet decoded well, it differs vastly from the Ambit watches.
-"""
+        data_str = " ".join(["{:0>X}".format(self.data[i])
+                            for i in range(self.length)])
+        return "type:{},{}, length: {}, data:{}".format(self.type,
+                                                        self.header_part,
+                                                        self.length,
+                                                        data_str)
 
 
 class BodyPersonalSettingsRead(ctypes.LittleEndianStructure, Dictionary):
@@ -397,6 +360,7 @@ class BodyPersonalSettingsRead(ctypes.LittleEndianStructure, Dictionary):
 
     def __str__(self):
         return "".join([" {:>02X}".format(a) for a in self.data])
+
 
 class BodyPersonalSettingsWrite(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -445,7 +409,7 @@ class MessageBody_(ctypes.Union):
                 ("device_status", BodyDeviceStatus),
                 ("log_count", BodyLogCount),
                 ("log_header_step", BodyLogHeaderStep),
-                ("log_header_format", BodyLogHeaderFormat),
+                ("log_header_entry", BodyLogHeaderEntry),
                 ("date_time", BodyDateTime),
                 ("data_request", BodyDataRequest),
                 ("data_reply", BodyDataReply),
@@ -596,17 +560,17 @@ class LogHeaderStepReply(Message):
 
 
 @register_msg
-class LogHeaderFormatRequest(Message):
+class LogHeaderEntryRequest(Message):
     command_id = 0x0b0b
     direction_id = 0x0005
     body_field = "empty"
 
 
 @register_msg
-class LogHeaderFormatReply(Message):
+class LogHeaderEntryReply(Message):
     command_id = 0x0b0b
     direction_id = 0x000a
-    body_field = "log_header_format"
+    body_field = "log_header_entry"
 # ------
 
 
@@ -646,16 +610,8 @@ class LogHeaderPeekReply(Message):
     15. Logpeek no more entries: 0xc00
     -> Data acquisition starts with command 0x0070
 
-ambit_command_log_count             = 0x0b06,
-    class LogCountRequest(Message):                 command_id = 0x060b
-ambit_command_log_head_first        = 0x0b07,
-    class LogHeaderRewindRequest(Message):          command_id = 0x070b
-    ambit_command_log_head_step         = 0x0b0a,
-    class LogHeaderStepRequest(Message):            command_id = 0x0a0b
-    ambit_command_log_head              = 0x0b0b,
-    class LogHeaderFormatRequest(Message):          command_id = 0x0b0b
-    ambit_command_log_head_peek         = 0x0b08,
-    class LogHeaderPeekRequest(Message):            command_id = 0x080b
+    After decoding the PMEM format it is known that the log header is just a
+    log entry... So log entries ar retrieved with the logheader retrieval.
 
 
 """
@@ -857,7 +813,7 @@ class SendFirmwareReply(Message):
 @register_msg
 class SendResetRequest(Message):
     """
-    This correlates with the packetcaptures -> yes, it causes a USB stack reset.
+    This correlates with the packetcaptures -> yes, causes a USB stack reset.
     Internal log has the Version:1.6.39 start with very few records.
     """
     command_id = 0x0002

@@ -53,7 +53,7 @@ single_commands = {
     "logstep":Cmd(protocol.LogHeaderStepRequest, "Request header step"),
 
     # logformat actually only retrieves an entry.... it is not special.
-    "logformat":Cmd(protocol.LogHeaderFormatRequest, "Request a log entry"),
+    "logentry":Cmd(protocol.LogHeaderEntryRequest, "Request a log entry"),
 }
 
 for command in single_commands:
@@ -77,7 +77,7 @@ if (args.command is None):
     parser.exit()
     sys.exit(1)
 
-if (args.command == "logformat"):
+if (args.command == "logentry"):
     spec = single_commands[args.command]
     c = communicator_class()
     c.connect()
@@ -89,7 +89,7 @@ if (args.command == "logformat"):
     print("{:s}".format(res))
     print("{:s}".format(repr(res)))
     print("{:s}".format(repr(bytes(res))))
-    v = processor.process_entry(res.log_header_format.header.raw)
+    v = processor.process_entry(res.log_header_entry.data)
     print(v)
     sys.exit()
     
