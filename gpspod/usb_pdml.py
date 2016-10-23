@@ -23,6 +23,13 @@
 # SOFTWARE.
 
 
+"""
+    This is a very ugly piece of code that parses Wireshark's PDML packet
+    exports into the relevant components. It uses tremenduous amounts of RAM,
+    as in, several gigabytes, probably from using the ElementTree to load the
+    entire PDML at once. 
+"""
+
 import xml.etree.ElementTree as ET
 import gzip
 import sys

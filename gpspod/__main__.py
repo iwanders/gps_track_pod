@@ -27,6 +27,7 @@ from .interact import Communicator, RecordingCommunicator
 import argparse
 import time
 import sys
+import os
 
 from collections import namedtuple
 Cmd = namedtuple("Cmd", ["request", "help"])
@@ -66,6 +67,19 @@ dump_rom.add_argument('-upto', type=int, default=int(0x3c0000 / 0x0200),
 dump_rom.add_argument('--file', type=str, default="/tmp/dump.bin",
                       help='file to write to')
 
+
+debug_interaction = subparsers.add_parser("debug_interaction",
+                                 help="Print interaction from file")
+debug_interaction.add_argument('file', type=str,
+                                help='The file with transactions.')
+
+debug_reconstruct_fs = subparsers.add_parser("debug_reconstruct_fs",
+                                 help="Print interaction from file")
+debug_reconstruct_fs.add_argument('file', type=str,
+                                help='The file with transactions.')
+debug_reconstruct_fs.add_argument('outfile', type=str, default=None, nargs="?",
+                                help='The file with transactions.')
+
 # parse the arguments.
 args = parser.parse_args()
 
@@ -76,6 +90,25 @@ if (args.command is None):
     parser.print_help()
     parser.exit()
     sys.exit(1)
+
+if (args.command == "debug_interaction"):
+    from .debug import print_interaction
+    print_interaction(args.file)
+
+if (args.command == "debug_reconstruct_fs"):
+    from .debug import reconstruct_filesystem
+    if (args.outfile is None):
+        # print(args.file.find("."))
+        # print(args.file)
+        path = os.path.dirname(args.file)
+        file_name = os.path.basename(args.file)
+        file_name = file_name[0:file_name.find(".")] + ".binfs"
+        output_file = os.path.join(path, file_name)
+    else:
+        output_file = args.outfile
+    # print(output_file)
+    reconstruct_filesystem(args.file, output_file)
+    
 
 if (args.command == "logentry"):
     spec = single_commands[args.command]
@@ -132,5 +165,5 @@ if (args.command == "dump"):
         
     f.close()
 
-c.write_json("/tmp/risntreist.json")
-c.write_json("/tmp/risntreist.json.gz")
+    c.write_json("/tmp/risntreist.json")
+    c.write_json("/tmp/risntreist.json.gz")

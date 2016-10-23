@@ -104,6 +104,8 @@ import math
     PMEM entries are of varying length, with one byte denoting the length of the next sample.
 """
 
+FILESYSTEM_SIZE = 0x3c0000
+
 
 # this is for creating more convoluted data types =)
 class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):

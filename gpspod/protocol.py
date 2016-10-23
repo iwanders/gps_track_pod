@@ -638,6 +638,12 @@ class DataReply(Message):
     direction_id = 0x000a
     body_field = "data_reply"
 
+    def position(self):
+        return self.data_reply.position
+
+    def length(self):
+        return self.data_reply.length
+
     def content(self):
         return bytes(self.data_reply.data)
 """
