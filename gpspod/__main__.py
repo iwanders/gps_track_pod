@@ -24,6 +24,7 @@
 
 from . import protocol
 from . import output
+from . import pmem
 from .interact import Communicator, RecordingCommunicator, OfflineCommunicator
 import argparse
 import time
@@ -47,6 +48,7 @@ def get_communicator(args):
     else:
         return Communicator()
 
+
 def get_device(args, communicator):
     if (args.fs is not None):
         # load it
@@ -57,7 +59,7 @@ def get_device(args, communicator):
     gps = device.GpsPod(communicator)
     gps.mount(fs)
     return gps
-    
+
 
 def run_device_info(args):
     communicator = get_communicator(args)
@@ -66,12 +68,22 @@ def run_device_info(args):
         communicator.write_msg(request)
         print(communicator.read_msg())
 
+
+def run_device_status(args):
+    communicator = get_communicator(args)
+    with communicator:
+        request = protocol.DeviceStatusRequest()
+        communicator.write_msg(request)
+        print(communicator.read_msg())
+
+
 def run_debug_dev_func(args):
     communicator = get_communicator(args)
     gps = get_device(args, communicator)
     with communicator:
         print(gps[0:100])
         gps.load_logs()
+
 
 def run_show_tracks(args):
     communicator = get_communicator(args)
@@ -81,6 +93,7 @@ def run_show_tracks(args):
         tracklist = gps.get_tracks()
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
+
 
 def run_retrieve_tracks(args):
     communicator = get_communicator(args)
@@ -95,17 +108,20 @@ def run_retrieve_tracks(args):
         metadata = track.get_header()
 
         base_time = datetime.datetime(year=metadata.year,
-                            month=metadata.month,
-                            day=metadata.day,
-                            hour=metadata.hour,
-                            minute=metadata.minute,
-                            second=metadata.second)
+                                      month=metadata.month,
+                                      day=metadata.day,
+                                      hour=metadata.hour,
+                                      minute=metadata.minute,
+                                      second=metadata.second)
         if (args.outfile is None):
             output_path = base_time.strftime("track_%Y_%m_%d_%H_%M_%S.gpx")
         else:
             output_path = args.outfile
 
-        print("Retrieving track {: >2d}, of {: >4d} samples and writing to {}".format(args.index, metadata.samples, output_path))
+        print("Retrieving track {: >2d}, of {: >4d} samples and"
+              " writing to {}".format(args.index,
+                                      metadata.samples,
+                                      output_path))
 
         track.load_entries()
         samples = track.get_entries()
@@ -136,10 +152,20 @@ def run_debug_view_messages(args):
 
 def run_debug_retrieve_fs(args):
     communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    with communicator:
+        data = gps[0:pmem.FILESYSTEM_SIZE]
+
+    with open(args.file, "bw") as f:
+        f.write(data)
+
+    return
+
+    f = open(args.file, "bw")
+    communicator = get_communicator(args)
     up_to_block = max(min(int(0x3c0000 / 0x0200), int(args.upto)), 0)
     with communicator:
         p = protocol.DataRequest()
-        f = open(args.file, "bw")
         sequence_number = 0
         error_count = 0
         i = 0
@@ -182,18 +208,19 @@ subparsers = parser.add_subparsers(dest="command")
 
 device_info = subparsers.add_parser("info", help="Print device info")
 device_info.set_defaults(func=run_device_info)
+device_status = subparsers.add_parser("status", help="Print device status")
+device_status.set_defaults(func=run_device_status)
 
 show_tracks = subparsers.add_parser("tracks", help="Show available tracks")
 show_tracks.set_defaults(func=run_show_tracks)
 
 retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track")
 retrieve_tracks.add_argument('index', type=int,
-                                 help='The index of the track to download')
+                             help='The index of the track to download')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
-                    help='The output file for FS, defaults to: '
-                    'track_%%Y_%%m_%%d_%%H_%%M_%%S.gpx')
+                             help='The output file for FS, defaults to: '
+                             'track_%%Y_%%m_%%d_%%H_%%M_%%S.gpx')
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
-
 
 
 # create subparser for debug

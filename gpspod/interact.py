@@ -154,6 +154,7 @@ class RecordingCommunicator(Communicator):
         self.write_json()
         return super().__exit__(*args, **kwargs)
 
+
 # this one should be able to use a transaction log...
 class OfflineCommunicator(Communicator):
     def write_packet(self, packet):
@@ -167,8 +168,6 @@ class OfflineCommunicator(Communicator):
 
     def close(self):
         pass
-
-
 
 
 if __name__ == "__main__":

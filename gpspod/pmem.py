@@ -40,7 +40,6 @@
         0x61a80 Dense binary combined with string... perhaps firmware?
             Contains parse / formats for strings at 0x62ed8, 0x65cc8
 
-            
     In the filesystem image the b'2I.L' marker is on 0xBE1C, in the file itself
     this marker is at 0x41C -> Filesystem header is 47616 long?
 
@@ -56,28 +55,29 @@
     This makes everything a lot clearer:
 
     We find on offset 0xf4240 (the position of the first GPS track):
-    52 42 0F 00 52 42 0F 00 01 00 00 00 FD 45 0F 00 00 A7 50 4D 45 4D 52 42 0F 00 52 42 0F 00 1B 00 00 04 00 19 00 00 00 02 00 03 00 02 0
-                                                          ^ this position is 0x0F4252! :D -> Start of log
+    52 42 0F 00 52 42 0F 00 01 00 00 00 FD 45 0F 00 00 A7 50 4D 45 4D 52 42 0F
+                                                          ^
+    this position is 0x0F4252! :D -> Start of log --------^
                                         ^ At this offset, the log ends 0x0F45FD
 
 
 
     For the gps log we find at position 0xf4240 the following header:
-    52 42 0F 00 52 42 0F 00 01 00 00 00 FD 45 0F 00 00 A7 50 4D 45 4D 52 42 0F 00 52 42 0F 00 1B 00 00 04 00 19 00 00 00 02 00 03 00 02 00 04 00 04 00 06 00 02 00 06 00 08 00 04 00 69 00 01 E0 07 0A 
+    52 42 0F 00 52 42 0F 00 01 00 00 00 FD 45 0F 00 00 A7 50 4D 45 4D 52 42 0F
     ^0x0F4252------offset pointing to ->  ----------------^
                                         0x0F45FD -> End of this log.
 
 
 
     On 0x927c0 We find the internal log, with the following header:
-    45 32 09 00 D2 27 09 00 02 00 00 00 7B 36 09 00 01 D4 50 4D 45 4D 45 32 09 00 D2 27 09 00 0C 00 02 00 00 00 00 DC 07
-                                                          ^ 0x927d2 -> begin log
+    45 32 09 00 D2 27 09 00 02 00 00 00 7B 36 09 00 01 D4 50 4D 45 4D 45 32 09
+                                                          ^ 0x927d2: begin log
     ^0x093245 points to the continuation? Or the prior?
 
     At 0x93245 We find another part of the internal log?
-    50 4D 45 4D 45 32 09 00 D2 27 09 00 0C 00 02 00 00 00 00 DC 07 01 02 00 00 00 20 00 05 15 00 00 00 50 00 1D 03 00 56 65 72 73 69 6F 6E 3A 31 2E 36 2E 33 39
+    50 4D 45 4D 45 32 09 00 D2 27 09 00 0C 00 02 00 00 00 00 DC 07 01 02 00 00
                 ^ here is 0x93245, what the position of the 50 4D 45 is...
-                            ^ 0x927d2 which is the start of the first log header...
+                            ^ 0x927d2 is the start of the first log header...
 
     50 4D 45 4D = b'PMEM' -> The identifier of the logs.
 
@@ -94,14 +94,19 @@ import struct
 import math
 
 """
-    So, we have a filesystem, with one file, which has an offset from the filesystem.
+    So, we have a filesystem, with one file, which has an offset from the
+    filesystem.
 
-    Then, we can discern (at least) two PMEM blocks, one contains internal logs, the other the track logs.
+    Then, we can discern (at least) two PMEM blocks, one contains internal
+    logs, the other the track logs.
 
-    Each PMEM block has a PMEMBlockHeader, which points to a PMEMSubBlockHeader, these PMEMSubBlockHeader create a doubly
-    linked list. These Logheaders contain entries, which should be parsed differently for the two PMEM Blocks.
+    Each PMEM block has a PMEMBlockHeader, which points to a
+    PMEMSubBlockHeader, these PMEMSubBlockHeader create a doubly linked list.
+    These Logheaders contain entries, which should be parsed differently for
+    the two PMEM Blocks.
 
-    PMEM entries are of varying length, with one byte denoting the length of the next sample.
+    PMEM entries are of varying length, with one byte denoting the length of
+    the next sample.
 """
 
 FILESYSTEM_SIZE = 0x3c0000
@@ -128,7 +133,7 @@ class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
         # next we convert the value.
         v = self.scale * self.field_
         if (self.limits):
-            v = max(min(v,self.limits[1]),self.limits[0])
+            v = max(min(v, self.limits[1]), self.limits[0])
         return v
 
     def __iter__(self):
@@ -137,64 +142,75 @@ class FieldEntry(ctypes.LittleEndianStructure, Readable, Dictionary):
 
 
 class Uint8ByteIgnored255Field(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint8),]
+    _fields_ = [("field_", ctypes.c_uint8), ]
     scale = 1
     ignore = 255
-    
+
 
 class Coordinate(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int32),]
+    _fields_ = [("field_", ctypes.c_int32), ]
     scale = 1e-7
     unit = "degrees"
+
 
 class LatitudeField(Coordinate):
     limits = (-90, 90)
     key = "latitude"
 
+
 class LongitudeField(Coordinate):
     limits = (-180, 180)
     key = "longitude"
 
+
 class DistanceField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint32),]
+    _fields_ = [("field_", ctypes.c_uint32), ]
     scale = 1
     unit = "m"
     key = "distance"
+
 
 class HeartRateField(Uint8ByteIgnored255Field):
     unit = "bpm"
     key = "heartrate"
 
+
 class TimeField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int32),]
+    _fields_ = [("field_", ctypes.c_int32), ]
     scale = 1e-3
     unit = "s"
     key = "time"
 
+
 class DurationField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int32),]
+    _fields_ = [("field_", ctypes.c_int32), ]
     scale = 0.1
     unit = "s"
     key = "duration"
 
+
 class VerticalVelocityField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int16),]
+    _fields_ = [("field_", ctypes.c_int16), ]
     scale = 0.01
     unit = "m/s"
     key = "vertical_velocity"
 
+
 class VelocityField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16),]
+    _fields_ = [("field_", ctypes.c_uint16), ]
     scale = 0.01
-    ignore=65535
+    ignore = 65535
     unit = "m/s"
     key = "speed"
+
 
 class GPSSpeedField(VelocityField):
     key = "gps_speed"
 
+
 class WristAccSpeed(VelocityField):
     key = "wristaccessory_speed"
+
 
 class BikePodSpeedField(VelocityField):
     key = "bikepod_speed"
@@ -202,76 +218,91 @@ class BikePodSpeedField(VelocityField):
 
 class GPSHeadingField(FieldEntry):
     key = "gps_heading"
-    _fields_ = [("field_", ctypes.c_uint16),]
+    _fields_ = [("field_", ctypes.c_uint16), ]
     scale = 0.01 / 360.0 * 2 * math.pi
     unit = "radians"
 
+
 class UnsignedMeterField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint32),]
+    _fields_ = [("field_", ctypes.c_uint32), ]
     scale = 0.01
     unit = "m"
+
 
 class EHPEField(UnsignedMeterField):
     key = "EHPE"
 
+
 class EVPEField(UnsignedMeterField):
     key = "EVPE"
 
+
 class AltitudeField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int16),]
+    _fields_ = [("field_", ctypes.c_int16), ]
     scale = 0.01
     unit = "m"
     key = "altitude"
     limits = (-1000, 15000)
 
+
 class PressureField(FieldEntry):
     scale = 0.1
     unit = "hpa"
 
+
 class AbsPressureField(PressureField):
-    _fields_ = [("field_", ctypes.c_uint16),]
+    _fields_ = [("field_", ctypes.c_uint16), ]
     key = "absolute_pressure"
 
+
 class TemperatureField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_int16),]
+    _fields_ = [("field_", ctypes.c_int16), ]
     key = "temperature"
     scale = 0.1
     unit = "celsius"
     limits = (-100, 100)
 
+
 class BatteryChargeField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint8),]
+    _fields_ = [("field_", ctypes.c_uint8), ]
     key = "batterycharge"
     unit = "%"
+
 
 class GPSAltitudeField(UnsignedMeterField):
     key = "gps_altitude"
     limits = (-1000, 15000)
-    
+
 
 class GPSHDOPField(Uint8ByteIgnored255Field):
     key = "gps_hdop"
 
+
 class GPSVDOPField(Uint8ByteIgnored255Field):
     key = "gps_vhdop"
 
+
 class WristCadenceField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16),]
-    ignore=65535
+    _fields_ = [("field_", ctypes.c_uint16), ]
+    ignore = 65535
     unit = "rpm"
     key = "wrist_cadence"
 
+
 class GPSSNRField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint8*16),]
+    _fields_ = [("field_", ctypes.c_uint8*16), ]
     unit = ""
     key = "snr"
-    
+
+
 class NumberOfSatellitesField(Uint8ByteIgnored255Field):
     key = "gps_satellites"
 
+
 class SeaLevelPressureField(PressureField):
-    _fields_ = [("field_", ctypes.c_int16),]
+    _fields_ = [("field_", ctypes.c_int16), ]
     key = "sealevel_pressure"
+
 
 class CadenceField(Uint8ByteIgnored255Field):
     key = "cadence"
@@ -281,38 +312,41 @@ class PeriodicStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
     _pack_ = 1
     pass
 
+
 sample_types = {
-    1:LatitudeField,
-    2:LongitudeField,
-    3:DistanceField,
-    4:VelocityField,
-    5:HeartRateField,
-    6:TimeField,
-    7:GPSSpeedField,
-    8:VelocityField,
-    9:BikePodSpeedField,
-    10:EHPEField,
-    11:EVPEField,
-    12:AltitudeField,
-    13:AltitudeField,
-    14:AbsPressureField,
-    15:TemperatureField,
-    16:BatteryChargeField,
-    17:GPSAltitudeField,
-    18:GPSHeadingField,
-    19:GPSHDOPField,
-    20:GPSVDOPField,
-    21:WristCadenceField,
-    22:GPSSNRField,
-    23:SeaLevelPressureField,
-    24:NumberOfSatellitesField,
-    25:VerticalVelocityField,    
-    26:CadenceField,    
+    1: LatitudeField,
+    2: LongitudeField,
+    3: DistanceField,
+    4: VelocityField,
+    5: HeartRateField,
+    6: TimeField,
+    7: GPSSpeedField,
+    8: VelocityField,
+    9: BikePodSpeedField,
+    10: EHPEField,
+    11: EVPEField,
+    12: AltitudeField,
+    13: AltitudeField,
+    14: AbsPressureField,
+    15: TemperatureField,
+    16: BatteryChargeField,
+    17: GPSAltitudeField,
+    18: GPSHeadingField,
+    19: GPSHDOPField,
+    20: GPSVDOPField,
+    21: WristCadenceField,
+    22: GPSSNRField,
+    23: SeaLevelPressureField,
+    24: NumberOfSatellitesField,
+    25: VerticalVelocityField,
+    26: CadenceField,
 }
+
 
 class DataStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
     _pack_ = 1
     pass
+
 
 class GpsUserData(DataStructure):
     _fields_ = [
@@ -324,6 +358,7 @@ class GpsUserData(DataStructure):
                 ("EHPE", ctypes.c_uint8),
                 ]
 
+
 class TimeBlock(DataStructure):
     _fields_ = [
                 ("year", ctypes.c_uint16),
@@ -333,45 +368,49 @@ class TimeBlock(DataStructure):
                 ("minute", ctypes.c_uint8),
                 ("second", ctypes.c_uint8),
                 ]
+
+
 class TimeReference(DataStructure):
     _fields_ = [
-                ("local", TimeBlock), # order might be swapped
+                ("local", TimeBlock),  # order might be swapped
                 ("UTC",  TimeBlock)
                 ]
 
 
 class VelocityFieldKmH(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16),]
+    _fields_ = [("field_", ctypes.c_uint16), ]
     scale = 0.01 / 3.6
     unit = "m/s"
 
 
 class TrackHeader(DataStructure):
-    _fields_ = [("time", TimeBlock), # sure
+    _fields_ = [("time", TimeBlock),  # sure
                 ("interval_SPECULATED", ctypes.c_uint16),
-                ("duration", DurationField), # sure
-                ("_", ctypes.c_uint8*14), # ??
-                ("velocity_avg", VelocityFieldKmH), # sure
-                ("velocity_max", VelocityFieldKmH), # sure
+                ("duration", DurationField),  # sure
+                ("_", ctypes.c_uint8*14),  # ??
+                ("velocity_avg", VelocityFieldKmH),  # sure
+                ("velocity_max", VelocityFieldKmH),  # sure
                 ("altitude_min", ctypes.c_int16),
                 ("altitude_max", ctypes.c_int16),
                 ("heartrate_avg", ctypes.c_uint8),
                 ("heartrate_max", ctypes.c_uint8),
                 ("_", ctypes.c_uint8),
-                ("activity_type", ctypes.c_uint8), # sure
-                ("activity_name", ctypes.c_char*16), # sure
+                ("activity_type", ctypes.c_uint8),  # sure
+                ("activity_name", ctypes.c_char*16),  # sure
                 ("heartrate_min", ctypes.c_uint8),
                 ("_", ctypes.c_uint8),
                 ("_", ctypes.c_uint8),
-                ("distance", DistanceField), # sure
-                ("samples", ctypes.c_uint32), # sure
-]
+                ("distance", DistanceField),  # sure
+                ("samples", ctypes.c_uint32),  # sure
+                ]
     _anonymous_ = ["time"]
 
     def __str__(self):
         return "{year}-{month}-{day} {hour:0>2}:{minute:0>2}:{second:0>2} "\
-            "distance: {distancevalue: >5}m, samples: {samples: >6}, interval:  {interval_SPECULATED: >1}s".format(
+            "distance: {distancevalue: >5}m, samples: {samples: >6},"\
+            " interval:  {interval_SPECULATED: >1}s".format(
                     distancevalue=self.distance.value, **dict(self))
+
 
 class VariableLengthField(DataStructure):
     def __init__(self, blob):
@@ -381,7 +420,7 @@ class VariableLengthField(DataStructure):
     @classmethod
     def read(cls, byte_object):
         a = cls(byte_object)
-        #print(byte_object)
+        # print(byte_object)
         ctypes.memmove(ctypes.addressof(a.data), bytes(byte_object),
                        min(len(byte_object), ctypes.sizeof(a.data)))
         return a
@@ -392,7 +431,6 @@ class VariableLengthField(DataStructure):
             key = clskey
             _fields_ = [("data", ctypes.c_uint8*length)]
         return foo
-
 
     def __iter__(self):
         # print(dir(self))
@@ -405,58 +443,67 @@ class VariableLengthField(DataStructure):
 class FallbackField(VariableLengthField):
     key = "unknown_field"
 
+
 class GPSTestField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint8*16),]
+    _fields_ = [("field_", ctypes.c_uint8*16), ]
     key = "gps_test"
+
 
 class GPSDataField(VariableLengthField):
     key = "gpsdata"
 
+
 class GPSAccuracyField(VariableLengthField):
     key = "accdata"
+
 
 class LogPauseField(FieldEntry):
     key = "logpause"
 
+
 class LogRestartField(FieldEntry):
     key = "logrestart"
 
+
 class IBIDataField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint8*64),]
+    _fields_ = [("field_", ctypes.c_uint8*64), ]
     key = "ibidata"
 
+
 class TTFFField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16),]
+    _fields_ = [("field_", ctypes.c_uint16), ]
     scale = 0.1
     unit = "s"
     key = "ttff"
 
+
 class DistanceSourceField(Uint8ByteIgnored255Field):
     key = "distancesource"
 
+
 class LapInfoField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16 * 23),]
+    _fields_ = [("field_", ctypes.c_uint16 * 23), ]
     key = "lapinfo"
 
+
 class GPSTestData(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint8*61),]
+    _fields_ = [("field_", ctypes.c_uint8*61), ]
     key = "gpstestdata"
 
 
-
 episodic_types = {
-    1:GPSTestField,
-    2:GPSDataField,
-    3:GPSAccuracyField,
-    4:LogPauseField,
-    5:LogRestartField,
-    6:IBIDataField,
-    7:TTFFField,
-    8:DistanceSourceField,
-    9:LapInfoField,
-    10:GpsUserData,
-    11:GPSTestData,
-    12:TimeReference,
+    1: GPSTestField,
+    2: GPSDataField,
+    3: GPSAccuracyField,
+    4: LogPauseField,
+    5: LogRestartField,
+    6: IBIDataField,
+    7: TTFFField,
+    8: DistanceSourceField,
+    9: LapInfoField,
+    10: GpsUserData,
+    11: GPSTestData,
+    12: TimeReference,
 }
 """
 episodic_lookup = {
@@ -478,6 +525,7 @@ episodic_lookup = {
 SampleFallback = Sample.partial(0, "Unknown", "")
 """
 
+
 class MEMfs():
     # contains the entire filesystem.
     def __init__(self, obj):
@@ -486,9 +534,11 @@ class MEMfs():
     def __getitem__(self, key):
         return self.backend[key]
 
+
 class BPMEMfile():
-    # contains the BPMEM.DAT file, that is; the thing that has the correct offsets.
+    # contains the BPMEM.DAT file: corrects offsets to align to FS.
     offset = 0xba00
+
     def __init__(self, fs):
         self.tracks = PMEMTrack(self, offset=0xf4240)
         self.log = PMEMInternalLog(self, offset=0x927c0)
@@ -496,12 +546,15 @@ class BPMEMfile():
 
     def __getitem__(self, key):
         # print("File: 0x{:0>6X} : 0x{:0>6X}".format(key.start, key.stop))
-        return self.fs[slice(key.start + self.offset, key.stop + self.offset, key.step)]
+        return self.fs[slice(key.start + self.offset, key.stop + self.offset,
+                             key.step)]
 
 """
     Every PMEMBlock contains several SubBlocks, these SubBlocks contain the
     entries to the log.
 """
+
+
 class PMEMBlockHeader(ctypes.LittleEndianStructure, Dictionary, Readable):
     _pack_ = 1
     _fields_ = [
@@ -511,9 +564,14 @@ class PMEMBlockHeader(ctypes.LittleEndianStructure, Dictionary, Readable):
         ("free", ctypes.c_uint32),
         ("pad", ctypes.c_uint16),
     ]
-    def __str__(self):
-        return "first: 0x{:0>6X}, last 0x{:0>6X}, entries: {:0>4d}, free:  0x{:0>6X}, ({:0>4X})".format(self.first, self.last, self.entries, self.free, self.pad)
 
+    def __str__(self):
+        return "first: 0x{:0>6X}, last 0x{:0>6X}, entries: {:0>4d},"\
+               " free:  0x{:0>6X}, ({:0>4X})".format(self.first,
+                                                     self.last,
+                                                     self.entries,
+                                                     self.free,
+                                                     self.pad)
 
 
 class PMEMSubBlockHeader(ctypes.LittleEndianStructure, Dictionary, Readable):
@@ -523,8 +581,10 @@ class PMEMSubBlockHeader(ctypes.LittleEndianStructure, Dictionary, Readable):
         ("next", ctypes.c_uint32),
         ("prev", ctypes.c_uint32)
     ]
+
     def __str__(self):
-        return "magic: {}, prev 0x{:0>6X} next 0x{:0>6X}".format(str(self.magic), self.prev, self.next)
+        return "magic: {}, prev 0x{:0>6X} next 0x{:0>6X}".format(
+                    str(self.magic), self.prev, self.next)
 
 
 class PMEMBlock():
@@ -534,23 +594,24 @@ class PMEMBlock():
         self.logs = []
 
     def load_block_header(self):
-        tmp = self.file[self.offset:(self.offset+ctypes.sizeof(PMEMBlockHeader))]
+        tmp = self.file[self.offset:(self.offset +
+                                     ctypes.sizeof(PMEMBlockHeader))]
         self.header = PMEMBlockHeader.read(tmp)
 
     def load_logs(self):
-        current_position = self.header.first
-        
-        for i in range(0, self.header.entries):
-            #print("Reading at: 0x{:0>6X}".format(current_position))
-            log_header = PMEMSubBlockHeader.read(self.file[current_position:current_position+ctypes.sizeof(PMEMSubBlockHeader)])
+        pos = self.header.first
 
-            if (log_header.next == current_position):
-                #print("Done")
+        for i in range(0, self.header.entries):
+            # print("Reading at: 0x{:0>6X}".format(current_position))
+            log_header = PMEMSubBlockHeader.read(
+                        self.file[pos:pos+ctypes.sizeof(PMEMSubBlockHeader)])
+
+            if (log_header.next == pos):
                 pass
-            #print(log_header)
-            self.logs.append(self.pmem_type(self, current_position+ctypes.sizeof(PMEMSubBlockHeader), log_header))
-            # self.logs.append({"entry":this_entry, "pos":current_position, "header_pos":current_position+ctypes.sizeof(PMEMSubBlockHeader)})
-            current_position = log_header.next
+            self.logs.append(self.pmem_type(
+                self, pos+ctypes.sizeof(PMEMSubBlockHeader), log_header))
+
+            pos = log_header.next
 
 
 class PMEMEntry(ctypes.LittleEndianStructure, Dictionary, Readable):
@@ -612,15 +673,14 @@ class PMEMTrackEntries(PMEMEntries):
             return False
 
         # No clue... \x03\x82\x00\x00\x00\x04
-        self.header_unknown1 =  self.get_entry()
+        self.header_unknown1 = self.get_entry()
         self.process_entry(self.header_unknown1)
 
         # No clue... \x03\x83\x00\x00\x00\x05
-        self.header_unknown2 =  self.get_entry()
+        self.header_unknown2 = self.get_entry()
         self.process_entry(self.header_unknown2)
 
         return True
-
 
     def process_entry(self, entry_bytes):
         pos = 0
@@ -649,33 +709,25 @@ class PMEMTrackEntries(PMEMEntries):
                     # anonymous_fields.append(fieldtype.key)
                 else:
                     key = "field_type_0x{:0>2X}".format(type)
-                    field_list.append((key,  VariableLengthField.fixed_length(clskey=key, length=length)))
+                    field_list.append((key,  VariableLengthField.fixed_length(
+                        clskey=key, length=length)))
 
-            #print(field_list)
             # next, we craft our periodicStructure:
             class SpecifiedPeriodicStructure(PeriodicStructure):
                 _fields_ = field_list
                 # _anonymous_ = anonymous_fields
 
             self.periodic_structure = SpecifiedPeriodicStructure
-                
             return None
 
         if (entry_type == 1):
-            # print("Bytes: {}".format(" ".join(["{:0>2X}".format(a) for a in entry_bytes[pos:]])))
             self.header_metadata = TrackHeader.read(entry_bytes[pos:])
             # print("Found header: {}".format(self.header_metadata))
-            
+
         # is periodic sample.
         if (entry_type == 2):
             samples = []
             # parse it according to the periodic entries.
-            # for sample_type, offset, length in self.periodic_entries:
-                # sample = sample_lookup.get(sample_type, SampleFallback)
-                # samples.append(sample(entry_bytes[pos+offset:pos+offset+length]))
-            # print(" ".join([str(a) for a in samples]))
-            # print(self.periodic_structure.read(entry_bytes[pos:]))
-            # return EpisodicSamples(*samples)
             return self.periodic_structure.read(entry_bytes[pos:])
 
         # Episodic type
@@ -686,10 +738,10 @@ class PMEMTrackEntries(PMEMEntries):
             processed = sample.read(entry_bytes[pos:])
             return processed
 
-
     def load_entries(self):
         if (self.header_metadata is not None):
-            for i in range(self.header_metadata.samples-self.retrieved_entry_count):
+            for i in range(self.header_metadata.samples -
+                           self.retrieved_entry_count):
                 processed = self.process_entry(self.get_entry())
                 if processed:
                     self.entries.append(processed)
@@ -704,8 +756,9 @@ class InternalLogEntry:
         self.text = text
 
     def __str__(self):
-        return "t: {: >10d}, (0x{:0>8X}), {}".format(self.time, self.identifier, self.text)
-        
+        return "t: {: >10d}, (0x{:0>8X}), {}".format(
+            self.time, self.identifier, self.text)
+
 
 class PMEMLogEntries(PMEMEntries):
 
@@ -719,10 +772,6 @@ class PMEMLogEntries(PMEMEntries):
 
         entry_type, pos = self.parse("B", entry_bytes, pos)
 
-        # print("\033[1;90m{0}\033[00m".format(" ".join(["{:0>2X}".format(b) for b in entry_bytes])))
-        # print("{}".format(" ".join(["{:0>2X}".format(b) for b in entry_bytes])))
-        # print(str(entry_bytes))
-
         if (entry_type == 5):
             # Seriously, what's up with the change in endianness for timestamp?
             timestamp, = struct.unpack("<I", entry_bytes[pos:pos+4])
@@ -731,18 +780,14 @@ class PMEMLogEntries(PMEMEntries):
                 text = entry_bytes[pos:].decode('ascii')
             except UnicodeDecodeError:
                 text = str(entry_bytes[pos:])
-            # print("entry_type: {} : t: {: >10d}, (0x{:0>8X}), {}".format(entry_type, timestamp, identifier, text))
-            entry = InternalLogEntry(entry_type, self.header, timestamp, identifier, text)
+            entry = InternalLogEntry(entry_type,
+                                     self.header, timestamp, identifier, text)
             return entry
 
         if (entry_type == 3):
-            # print("entry_type: {} : No clue {}".format(entry_type, " ".join(["{:0>2X}".format(b) for b in entry_bytes])))
             text = " ".join(["{:0>2X}".format(b) for b in entry_bytes[1:]])
             entry = InternalLogEntry(entry_type, self.header, 0, 0, text)
             return entry
-            
-            
-        # return True
 
     def load_entries(self, max=1000000):
         # probably for the best to take some limit on this...
@@ -757,6 +802,7 @@ class PMEMLogEntries(PMEMEntries):
 
 class PMEMTrack(PMEMBlock):
     pmem_type = PMEMTrackEntries
+
 
 class PMEMInternalLog(PMEMBlock):
     pmem_type = PMEMLogEntries
@@ -794,11 +840,3 @@ if __name__ == "__main__":
         samples = log.get_entries()
         for sample in samples[:15]:
             print(sample)
-        
-    # for j in range(10):
-        # entry = data.tracks.logs[0].get_entry()
-        # a = Sample.read(entry)
-        # print(" ".join(["{:0>2X}".format(a) for a in entry]) +  "  " + str(entry))
-
-    # print(data.tracks.header)
-    # print(data.log.header)

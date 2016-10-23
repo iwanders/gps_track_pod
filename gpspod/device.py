@@ -25,6 +25,7 @@
 from . import pmem
 from . import protocol
 import usb
+import time
 
 
 class GpsPod:
@@ -68,7 +69,8 @@ class GpsPod:
         # otherwise, we have to get it.
         block_size = protocol.DataRequest.block_size
         block_start = int(key.start / block_size)
-        block_end = int((key.stop + block_size) / block_size)
+        block_end = min(int((key.stop + block_size) / block_size),
+                        int(pmem.FILESYSTEM_SIZE/block_size))
 
         for i in range(block_start, block_end):
             if (not self.transfer_block(i)):
@@ -79,7 +81,8 @@ class GpsPod:
         if self.have_data(key):
             return self.fs[key]
         else:
-            raise IndexError("Could not get data") # TODO: Use a proper error?
+            # TODO: Use a proper error?
+            raise IndexError("Could not get data")
 
     def mount(self, fs=None):
         if (fs is None):
@@ -90,7 +93,6 @@ class GpsPod:
             self.retrieved_fs = bytes([1 for i in range(pmem.FILESYSTEM_SIZE)])
             self.memfs = pmem.MEMfs(fs)
             self.data = pmem.BPMEMfile(self.memfs)
-            
 
     def load_tracks(self):
         self.data.tracks.load_block_header()
@@ -103,4 +105,3 @@ class GpsPod:
 
     def get_tracks(self):
         return self.tracks
-

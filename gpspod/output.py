@@ -62,7 +62,7 @@ def create_gpx_from_log(logentries, metadata):
 
     trk = ET.SubElement(root, "trk")
     trkseg = ET.SubElement(trk, "trkseg")
-    
+
     # first run a for loop to consolidate the data, we take the periodic as
     # dominant for the time, as it is more precise.
     entries = []
@@ -76,22 +76,19 @@ def create_gpx_from_log(logentries, metadata):
             entries.append(current)
             current = {}
 
-
-    #<time>2016-09-29T04:39:03.000Z</time>
-    # print(dict(metadata))
     base_time = datetime.datetime(year=metadata.year,
-                                month=metadata.month,
-                                day=metadata.day,
-                                hour=metadata.hour,
-                                minute=metadata.minute,
-                                second=metadata.second)
+                                  month=metadata.month,
+                                  day=metadata.day,
+                                  hour=metadata.hour,
+                                  minute=metadata.minute,
+                                  second=metadata.second)
     name_el = ET.SubElement(trk, "name")
     name_el.text = base_time.strftime("Track %Y-%m- %d:%H:%M:%S")
 
     for seg in entries:
         # print(seg)
-        if (not "latitude" in seg) or (not "longitude" in seg) or (not\
-                                                            "time" in seg):
+        if ("latitude" not in seg) or ("longitude" not in seg) or (
+                                                            "time" not in seg):
             continue
 
         trkpt = ET.SubElement(trkseg, "trkpt")
@@ -114,36 +111,35 @@ def create_gpx_from_log(logentries, metadata):
             distance = ET.SubElement(extensions, "gpxdata:distance")
             distance.text = "{:d}".format(seg["distance"]["value"])
 
-        if "speed" in seg:
+        if ("speed" in seg) and (seg["speed"]["value"] is not None):
             speed = ET.SubElement(extensions, "gpxdata:speed")
             speed.text = "{:.3f}".format(seg["speed"]["value"])
 
         if "vertical_velocity" in seg:
             vertical_velocity = ET.SubElement(extensions,
                                               "gpxdata:verticalSpeed")
-            vertical_velocity.text = "{:.3f}".format(seg["vertical_velocity"]["value"])
+            vertical_velocity.text = "{:.3f}".format(
+                seg["vertical_velocity"]["value"])
 
-        if "heartrate" in seg:
+        if ("heartrate" in seg) and (seg["heartrate"]["value"] is not None):
             heartrate = ET.SubElement(extensions,
-                                              "gpxdata:hr")
+                                      "gpxdata:hr")
             heartrate.text = "{:d}".format(seg["heartrate"]["value"])
 
         if "EHPE" in seg:
             EHPE = ET.SubElement(extensions,
-                                              "gpxdata:EHPE")
+                                 "gpxdata:EHPE")
             EHPE.text = "{:d}".format(seg["EHPE"])
 
         if "EVPE" in seg:
             EVPE = ET.SubElement(extensions,
-                                              "gpxdata:EVPE")
+                                 "gpxdata:EVPE")
             EVPE.text = "{:d}".format(seg["EVPE"])
 
         if "gpsheading" in seg:
             gpsheading = ET.SubElement(extensions,
-                                              "gpxdata:heading")
+                                       "gpxdata:heading")
             gpsheading.text = "{:.3f}".format(seg["gpsheading"]["value"])
-
-
 
     # xmlstr = ET.tostring(root, encoding='utf8', method='xml')
     # import sys
