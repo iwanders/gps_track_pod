@@ -87,7 +87,7 @@
     But we know for sure that the file starts at 0xba00 in the disk image.
 """
 
-from protocol import Readable, Dictionary
+from .protocol import Readable, Dictionary
 import ctypes
 from collections import namedtuple
 import struct

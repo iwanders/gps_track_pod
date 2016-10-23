@@ -51,7 +51,9 @@ single_commands = {
     "logrewind":Cmd(protocol.LogHeaderRewindRequest, "Request header unwind"),
     "logpeek":Cmd(protocol.LogHeaderPeekRequest, "Request header peek"),
     "logstep":Cmd(protocol.LogHeaderStepRequest, "Request header step"),
-    "logformat":Cmd(protocol.LogHeaderFormatRequest, "Request log format"),
+
+    # logformat actually only retrieves an entry.... it is not special.
+    "logformat":Cmd(protocol.LogHeaderFormatRequest, "Request a log entry"),
 }
 
 for command in single_commands:
@@ -74,6 +76,24 @@ if (args.command is None):
     parser.print_help()
     parser.exit()
     sys.exit(1)
+
+if (args.command == "logformat"):
+    spec = single_commands[args.command]
+    c = communicator_class()
+    c.connect()
+    req = spec.request()
+    c.write_msg(req)
+    res = c.read_msg()
+    from . import pmem
+    processor = pmem.PMEMTrackEntries(None, None, None)
+    print("{:s}".format(res))
+    print("{:s}".format(repr(res)))
+    print("{:s}".format(repr(bytes(res))))
+    v = processor.process_entry(res.log_header_format.header.raw)
+    print(v)
+    sys.exit()
+    
+    
 
 # single command.
 if (args.command in single_commands):
