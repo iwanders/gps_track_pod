@@ -28,6 +28,7 @@ import argparse
 import time
 import sys
 import os
+from . import device
 
 
 def get_communicator(args):
@@ -46,6 +47,15 @@ def run_device_info(args):
     with communicator:
         request = protocol.DeviceInfoRequest()
         communicator.write_msg(request)
+        print(communicator.read_msg())
+
+def run_debug_dev_func(args):
+    communicator = get_communicator(args)
+    with communicator:
+        gps = device.GpsPod(communicator)
+        print(gps[0:100])
+        gps.mount()
+        gps.load_logs()
 
 
 def run_debug_reconstruct_fs(args):
@@ -156,6 +166,10 @@ debug_retrieve_fs.add_argument('--upto', type=int, default=0x3c0000,
                                help="Retrieve up to this address (0x3c0000)")
 debug_retrieve_fs.set_defaults(func=run_debug_retrieve_fs)
 
+
+
+debug_dev_func = debug_subcommand.add_parser("test")
+debug_dev_func.set_defaults(func=run_debug_dev_func)
 
 args = parser.parse_args()
 
