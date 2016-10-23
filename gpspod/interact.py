@@ -34,6 +34,7 @@ import json
 import gzip
 import base64
 
+
 class Communicator():
     write_endpoint = 0x02
     read_endpoint = 0x82
@@ -107,8 +108,16 @@ class Communicator():
         res = self.dev.read(self.read_endpoint, self.usb_packetlength)
         return res
 
+    def __enter__(self):
+        self.connect()
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
 class RecordingCommunicator(Communicator):
-    def __init__(self):
+    def __init__(self, path=None):
+        self.save_path = path
         self.incoming_packets = []
         self.outgoing_packets = []
         super().__init__()
@@ -132,10 +141,17 @@ class RecordingCommunicator(Communicator):
             outgoing_processed.append((t, base64.b64encode(v).decode('ascii')))
         return {"incoming":incoming_processed, "outgoing":outgoing_processed}
 
-    def write_json(self, path):
-        opener = gzip.open if path.endswith(".gz") else open
-        with opener(path, "wt") as f:
-            json.dump(self.transactions(), f)
+    def write_json(self, path=None):
+        if (path == None):
+            path = self.save_path
+        if (path != None):
+            opener = gzip.open if path.endswith(".gz") else open
+            with opener(path, "wt") as f:
+                json.dump(self.transactions(), f)
+
+    def __exit__(self, *args, **kwargs):
+        self.write_json()
+        return super().__exit__(*args, **kwargs)
 
 if __name__ == "__main__":
     req = protocol.DeviceInfoRequest()

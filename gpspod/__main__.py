@@ -29,77 +29,28 @@ import time
 import sys
 import os
 
-from collections import namedtuple
-Cmd = namedtuple("Cmd", ["request", "help"])
+
+def get_communicator(args):
+    # time.strftime(format[, t])
+    if (args.recordpath == None):
+        recordpath = time.strftime("%Y_%m_%d_%H_%M_%S.json.gz")
+    else:
+        recordpath = args.recordpath
+    if (args.record):
+        return RecordingCommunicator(recordpath)
+    else:
+        return Communicator()
+
+def run_device_info(args):
+    communicator = get_communicator(args)
+    with communicator:
+        request = protocol.DeviceInfoRequest()
+        communicator.write_msg(request)
 
 
-parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
-parser.add_argument('--verbose', '-v', help="Print all communication.",
-                    action="store_true", default=False)
-
-parser.add_argument('--record', help="Record usb packets to aid debugging and\
-                    analysis.", default=True)
-
-subparsers = parser.add_subparsers(dest="command")
-
-
-single_commands = {
-    "device":Cmd(protocol.DeviceInfoRequest, "Request device info"),
-    "reset":Cmd(protocol.SendResetRequest, "Reset"),
-    "settings":Cmd(protocol.ReadSettingsRequest, "Request settings"),
-    "status":Cmd(protocol.DeviceStatusRequest, "Request device status"),
-    "logcount":Cmd(protocol.LogCountRequest, "Request log count"),
-    "logrewind":Cmd(protocol.LogHeaderRewindRequest, "Request header unwind"),
-    "logpeek":Cmd(protocol.LogHeaderPeekRequest, "Request header peek"),
-    "logstep":Cmd(protocol.LogHeaderStepRequest, "Request header step"),
-
-    # logformat actually only retrieves an entry.... it is not special.
-    "logentry":Cmd(protocol.LogHeaderEntryRequest, "Request a log entry"),
-}
-
-for command in single_commands:
-    spec = single_commands[command]
-    sub_parser = subparsers.add_parser(command, help=spec.help)
-
-dump_rom = subparsers.add_parser("dump", help="Make a dump of some memory")
-dump_rom.add_argument('-upto', type=int, default=int(0x3c0000 / 0x0200),
-                      help='number of blocks to retrieve')
-dump_rom.add_argument('--file', type=str, default="/tmp/dump.bin",
-                      help='file to write to')
-
-
-debug_interaction = subparsers.add_parser("debug_interaction",
-                                 help="Print interaction from file")
-debug_interaction.add_argument('file', type=str,
-                                help='The file with transactions.')
-
-debug_reconstruct_fs = subparsers.add_parser("debug_reconstruct_fs",
-                                 help="Print interaction from file")
-debug_reconstruct_fs.add_argument('file', type=str,
-                                help='The file with transactions.')
-debug_reconstruct_fs.add_argument('outfile', type=str, default=None, nargs="?",
-                                help='The file with transactions.')
-
-# parse the arguments.
-args = parser.parse_args()
-
-communicator_class = RecordingCommunicator if args.record else Communicator
-
-# no command
-if (args.command is None):
-    parser.print_help()
-    parser.exit()
-    sys.exit(1)
-
-if (args.command == "debug_interaction"):
-    from .debug import print_interaction
-    print_interaction(args.file)
-
-if (args.command == "debug_reconstruct_fs"):
+def run_debug_reconstruct_fs(args):
     from .debug import reconstruct_filesystem
     if (args.outfile is None):
-        # print(args.file.find("."))
-        # print(args.file)
         path = os.path.dirname(args.file)
         file_name = os.path.basename(args.file)
         file_name = file_name[0:file_name.find(".")] + ".binfs"
@@ -108,34 +59,86 @@ if (args.command == "debug_reconstruct_fs"):
         output_file = args.outfile
     # print(output_file)
     reconstruct_filesystem(args.file, output_file)
-    
 
-if (args.command == "logentry"):
-    spec = single_commands[args.command]
-    c = communicator_class()
-    c.connect()
-    req = spec.request()
-    c.write_msg(req)
-    res = c.read_msg()
-    from . import pmem
-    processor = pmem.PMEMTrackEntries(None, None, None)
-    print("{:s}".format(res))
-    print("{:s}".format(repr(res)))
-    print("{:s}".format(repr(bytes(res))))
-    v = processor.process_entry(res.log_header_entry.data)
-    print(v)
-    sys.exit()
-    
-    
 
-# single command.
-if (args.command in single_commands):
-    spec = single_commands[args.command]
-    c = communicator_class()
-    c.connect()
-    req = spec.request()
-    c.write_msg(req)
-    print("{:s}".format(c.read_msg()))
+def run_debug_view_messages(args):
+    from .debug import print_interaction
+    print_interaction(args.file)
+
+# argument parsing
+parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
+parser.add_argument('--verbose', '-v', help="Print all communication.",
+                    action="store_true", default=False)
+parser.add_argument('--record', help="Record usb packets to aid debugging and\
+                    analysis.", default=True)
+parser.add_argument('--recordpath', help="Default file to record to"
+                    " (%%Y_%%m_%%d_%%H_%%M_%%S.json.gz)",
+                    default=None)
+
+subparsers = parser.add_subparsers(dest="command")
+
+
+device_info = subparsers.add_parser("info", help="Print device info")
+device_info.set_defaults(func=run_device_info)
+
+
+"""
+dump_rom = subparsers.add_parser("dump", help="Make a dump of some memory")
+dump_rom.add_argument('-upto', type=int, default=int(0x3c0000 / 0x0200),
+                      help='number of blocks to retrieve')
+dump_rom.add_argument('--file', type=str, default="/tmp/dump.binfs",
+                      help='file to write to')
+"""
+
+
+# create subparser for debug
+debug_command = subparsers.add_parser("debug", help="Various debug tools.")
+
+debug_subcommand = debug_command.add_subparsers(dest="subcommand")
+
+debug_view_messages = debug_subcommand.add_parser(
+                        "view", help="Show messages in file")
+debug_view_messages.add_argument('file', type=str,
+                                 help='The file with usb interaction.')
+debug_view_messages.set_defaults(func=run_debug_view_messages)
+
+
+debug_reconstruct_fs = debug_subcommand.add_parser(
+                        "reconstruct",
+                        help="Reconstruct filesystem from interaction")
+debug_reconstruct_fs.add_argument('file',
+                                  type=str,
+                                  help='The file with transactions.')
+debug_reconstruct_fs.add_argument(
+                    'outfile', type=str, default=None, nargs="?",
+                    help='The output file for FS, defaults to: '
+                    'INPUTFILE.binfs')
+debug_reconstruct_fs.set_defaults(func=run_debug_reconstruct_fs)
+
+
+args = parser.parse_args()
+
+# parse the arguments.
+
+
+# no command
+if (args.command is None):
+    parser.print_help()
+    parser.exit()
+    sys.exit(1)
+
+# debug and no command.
+if (args.command == "debug"):
+    if (args.subcommand is None):
+        debug_command.print_help()
+        debug_command.exit()
+        sys.exit(1)
+
+
+args.func(args)
+sys.exit()
+
+
 
 if (args.command == "dump"):
     up_to_block = max(min(int(0x3c0000 / 0x0200), int(args.upto)), 0)
