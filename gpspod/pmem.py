@@ -277,6 +277,10 @@ class CadenceField(Uint8ByteIgnored255Field):
     key = "cadence"
 
 
+class PeriodicStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
+    _pack_ = 1
+    pass
+
 sample_types = {
     1:LatitudeField,
     2:LongitudeField,
@@ -326,8 +330,8 @@ class TimeBlock(DataStructure):
                 ("month",  ctypes.c_uint8),
                 ("day", ctypes.c_uint8),
                 ("hour", ctypes.c_uint8),
-                ("minutes", ctypes.c_uint8),
-                ("seconds", ctypes.c_uint8),
+                ("minute", ctypes.c_uint8),
+                ("second", ctypes.c_uint8),
                 ]
 class TimeReference(DataStructure):
     _fields_ = [
@@ -365,7 +369,7 @@ class TrackHeader(DataStructure):
     _anonymous_ = ["time"]
 
     def __str__(self):
-        return "{year}-{month}-{day} {hour:0>2}:{minutes:0>2}:{seconds:0>2} "\
+        return "{year}-{month}-{day} {hour:0>2}:{minute:0>2}:{second:0>2} "\
             "distance: {distancevalue: >5}m, samples: {samples: >6}, interval:  {interval_SPECULATED: >1}s".format(
                     distancevalue=self.distance.value, **dict(self))
 
@@ -649,11 +653,11 @@ class PMEMTrackEntries(PMEMEntries):
 
             #print(field_list)
             # next, we craft our periodicStructure:
-            class periodicStructure(DataStructure):
+            class SpecifiedPeriodicStructure(PeriodicStructure):
                 _fields_ = field_list
                 # _anonymous_ = anonymous_fields
 
-            self.periodic_structure = periodicStructure
+            self.periodic_structure = SpecifiedPeriodicStructure
                 
             return None
 

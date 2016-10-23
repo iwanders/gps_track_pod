@@ -23,9 +23,11 @@
 # SOFTWARE.
 
 from . import protocol
+from . import output
 from .interact import Communicator, RecordingCommunicator, OfflineCommunicator
 import argparse
 import time
+import datetime
 import sys
 import os
 from . import device
@@ -81,10 +83,6 @@ def run_show_tracks(args):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
 
 def run_retrieve_tracks(args):
-    if (args.outfile is None):
-        output_path = time.strftime("%Y_%m_%d_%H_%M_%S.gpx")
-    else:
-        output_path = args.outfile
     communicator = get_communicator(args)
     gps = get_device(args, communicator)
     with communicator:
@@ -92,12 +90,30 @@ def run_retrieve_tracks(args):
         tracklist = gps.get_tracks()
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
-        print("Retrieving track {: >2d} and writing to {}".format(args.index, output_path))
         track = tracklist[args.index]
+
+        metadata = track.get_header()
+
+        base_time = datetime.datetime(year=metadata.year,
+                            month=metadata.month,
+                            day=metadata.day,
+                            hour=metadata.hour,
+                            minute=metadata.minute,
+                            second=metadata.second)
+        if (args.outfile is None):
+            output_path = base_time.strftime("track_%Y_%m_%d_%H_%M_%S.gpx")
+        else:
+            output_path = args.outfile
+
+        print("Retrieving track {: >2d}, of {: >4d} samples and writing to {}".format(args.index, metadata.samples, output_path))
+
         track.load_entries()
         samples = track.get_entries()
-        for j in samples:
-            print(dict(j))
+        text = output.create_gpx_from_log(samples, metadata=metadata)
+        print("Done creating gpx, writing")
+
+        with open(output_path, "wb") as f:
+            f.write(text)
 
 
 def run_debug_reconstruct_fs(args):
@@ -175,7 +191,7 @@ retrieve_tracks.add_argument('index', type=int,
                                  help='The index of the track to download')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                     help='The output file for FS, defaults to: '
-                    '%%Y_%%m_%%d_%%H_%%M_%%S.gpx')
+                    'track_%%Y_%%m_%%d_%%H_%%M_%%S.gpx')
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
 

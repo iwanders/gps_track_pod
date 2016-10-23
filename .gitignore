@@ -2,3 +2,4 @@ __pycache__
 venv
 *.json.gz
 *.binfs
+*.gpx
