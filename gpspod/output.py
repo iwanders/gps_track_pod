@@ -24,29 +24,14 @@
 
 from .pmem import PeriodicStructure, GpsUserData
 import xml.etree.cElementTree as ET
+from xml.dom import minidom
 import datetime
 
 
 def create_gpx_from_log(logentries, metadata):
-    """
- <trk>
-    <name>Move</name>
-    <trkseg>
-      <trkpt lat="52.245678" lon="6.84672">
-        <ele>22</ele>
-        <time>2016-09-29T04:39:03.000Z</time>
-        <extensions>
-          <gpxdata:distance>-459.44085888</gpxdata:distance>
-          <gpxdata:speed>-2.91825064047272</gpxdata:speed>
-          <gpxdata:verticalSpeed>0</gpxdata:verticalSpeed>
-        </extensions>
-      </trkpt>
-      <trkpt lat="52.243231" lon="6.848448">
-        <ele>23</ele>
-    """
     root = ET.Element("gpx")
     root.attrib["creator"] = "GPS Track Pod "\
-                             "(https://github.com/iwanders/gps_track_pod)"
+                             "(via https://github.com/iwanders/gps_track_pod)"
     root.attrib["xmlns:xsi"] = "http://www.w3.org/2001/XMLSchema-instance"
     root.attrib["xsi:schemaLocation"] = "http://www.topografix.com/GPX/1/1 "\
         "http://www.topografix.com/GPX/1/1/gpx.xsd "\
@@ -83,7 +68,7 @@ def create_gpx_from_log(logentries, metadata):
                                   minute=metadata.minute,
                                   second=metadata.second)
     name_el = ET.SubElement(trk, "name")
-    name_el.text = base_time.strftime("Track %Y-%m- %d:%H:%M:%S")
+    name_el.text = base_time.strftime("Track %Y-%m-%d %H:%M:%S")
 
     for seg in entries:
         # print(seg)
@@ -141,7 +126,7 @@ def create_gpx_from_log(logentries, metadata):
                                        "gpxdata:heading")
             gpsheading.text = "{:.3f}".format(seg["gpsheading"]["value"])
 
-    # xmlstr = ET.tostring(root, encoding='utf8', method='xml')
-    # import sys
-    # sys.stdout.buffer.write(xmlstr)
-    return ET.tostring(root, encoding='utf-8', method='xml')
+    xmlstr = ET.tostring(root, encoding='utf-8', method='xml')
+    xmlstr_pretty = minidom.parseString(xmlstr).toprettyxml()
+
+    return xmlstr_pretty
