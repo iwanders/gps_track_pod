@@ -37,6 +37,7 @@ class GpsPod:
         self.data = None
 
         self.tracks = []
+        self.debug_logs = []
 
     def transfer_block(self, block_index, retry_count=10):
         p = protocol.DataRequest()
@@ -105,3 +106,14 @@ class GpsPod:
 
     def get_tracks(self):
         return self.tracks
+
+
+    def load_debug_logs(self):
+        self.data.logs.load_block_header()
+        self.data.logs.load_logs()
+        for log in self.data.logs.logs:
+            if log.load_header():
+                self.debug_logs.append(log)
+        
+    def get_debug_logs(self):
+        return self.debug_logs

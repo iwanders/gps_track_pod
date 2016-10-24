@@ -541,7 +541,7 @@ class BPMEMfile():
 
     def __init__(self, fs):
         self.tracks = PMEMTrack(self, offset=0xf4240)
-        self.log = PMEMInternalLog(self, offset=0x927c0)
+        self.logs = PMEMInternalLog(self, offset=0x927c0)
         self.fs = fs
 
     def __getitem__(self, key):

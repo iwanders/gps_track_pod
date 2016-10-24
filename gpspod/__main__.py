@@ -48,7 +48,6 @@ def get_communicator(args):
     if (args.fs is not None):
         return interact.OfflineCommunicator()
 
-
     if (args.record):
         return interact.RecordingCommunicator(recordpath)
     else:
@@ -169,36 +168,17 @@ def run_debug_retrieve_fs(args):
     with open(args.file, "bw") as f:
         f.write(data)
 
-    return
-
-    f = open(args.file, "bw")
+def run_debug_internallog(args):
     communicator = get_communicator(args)
-    up_to_block = max(min(int(0x3c0000 / 0x0200), int(args.upto)), 0)
+    gps = get_device(args, communicator)
     with communicator:
-        p = protocol.DataRequest()
-        sequence_number = 0
-        error_count = 0
-        i = 0
-        while (i < up_to_block) and (error_count < 10):
-            sys.stdout.write(
-                "Retrieve: 0x{:0>8X}/0x{:0>8X}\r".format(
-                        i*p.block_size, up_to_block*p.block_size))
-            sys.stdout.flush()
-            p.pos(i * p.block_size)
-            communicator.write_msg(p)
-            ret_packet = communicator.read_msg()
-            if (type(ret_packet) == protocol.DataReply):
-                i += 1
-                f.write(ret_packet.content())
-            else:
-                error_count += 1
-                print("Wrong packet response: {:s}".format(ret_packet))
-                print("Will retry this block: {:>0X}"
-                      ", current_error count: {}".format(i, error_count))
-            time.sleep(0.01)
-            sequence_number += 1
-
-        f.close()
+        gps.load_debug_logs()
+        logs = gps.get_debug_logs()
+        for log in logs:
+            log.load_entries()
+            for m in log.get_entries():
+                print(m)
+    
 
 # argument parsing
 parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
@@ -269,6 +249,10 @@ debug_retrieve_fs.add_argument('--upto', type=int, default=0x3c0000,
                                help="Retrieve up to this address (0x3c0000)")
 debug_retrieve_fs.set_defaults(func=run_debug_retrieve_fs)
 
+debug_internallog = debug_subcommand.add_parser(
+                        "internallog",
+                        help="print the internal log")
+debug_internallog.set_defaults(func=run_debug_internallog)
 
 debug_dev_func = debug_subcommand.add_parser("test")
 debug_dev_func.set_defaults(func=run_debug_dev_func)
