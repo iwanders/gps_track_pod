@@ -385,7 +385,7 @@ class VelocityFieldKmH(FieldEntry):
 
 class TrackHeader(DataStructure):
     _fields_ = [("time", TimeBlock),  # sure
-                ("interval_SPECULATED", ctypes.c_uint16),
+                ("interval", ctypes.c_uint16),
                 ("duration", DurationField),  # sure
                 ("_", ctypes.c_uint8*14),  # ??
                 ("velocity_avg", VelocityFieldKmH),  # sure
@@ -408,7 +408,7 @@ class TrackHeader(DataStructure):
     def __str__(self):
         return "{year}-{month}-{day} {hour:0>2}:{minute:0>2}:{second:0>2} "\
             "distance: {distancevalue: >5}m, samples: {samples: >6},"\
-            " interval:  {interval_SPECULATED: >1}s".format(
+            " interval:  {interval: >1}s".format(
                     distancevalue=self.distance.value, **dict(self))
 
 
