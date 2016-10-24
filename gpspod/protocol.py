@@ -397,6 +397,37 @@ class BodyDataReply(ctypes.LittleEndianStructure, Dictionary):
         return "0x{:>04X},0x{:>04X},".format(self.position, self.length)
         # + " ".join(["{:>02X}".format(a) for a in self.data])
 
+class BodySetSoundsRequest(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("frontpadding", ctypes.c_uint8*26),
+        ("sounds", ctypes.c_uint8), # Should equal 2 for off, 1 for on.
+        ("rearpadding", ctypes.c_uint8*(70 - 26 - 1)),
+    ]
+
+    def __str__(self):
+        return "Soundstate: 0x{:>02X}".format(self.sounds)
+        # + " ".join(["{:>02X}".format(a) for a in self.data])
+
+
+class BodySetSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("frontpadding", ctypes.c_uint8*52),
+        ("log_interval1_", ctypes.c_uint16),
+        ("log_interval2_", ctypes.c_uint16),
+        ("autolap_", ctypes.c_uint16),
+        ("midpadding", ctypes.c_uint8*10),
+        ("autostart_", ctypes.c_uint8), # 1 for on, 0 for off.
+        ("more_zeros", ctypes.c_uint8),
+        ("autosleep_", ctypes.c_uint16), # is in minutes
+        ("rearpadding", ctypes.c_uint8*(284 - 52 -2 -2 -2 -10 -1 -1 -2)),
+    ]
+
+    def __str__(self):
+        # print(" ".join(["{:>02X}".format(a) for a in self.frontpadding]))
+        return "Log interval1: {:d}, Log interval1: {:d}, autolap: {:d}, autostart:{:d}, autosleep:{:d}".format(self.log_interval1_, self.log_interval2_, self.autolap_, self.autostart_,self.autosleep_)
+        return ""
 
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -418,6 +449,8 @@ class MessageBody_(ctypes.Union):
                 ("empty", BodyEmpty),
                 ("personal_settings_read", BodyPersonalSettingsRead),
                 ("personal_settings_write", BodyPersonalSettingsWrite),
+                ("set_sounds_request", BodySetSoundsRequest),
+                ("set_settings_request", BodySetSettingsRequest),
                 ]
 
 
@@ -726,14 +759,14 @@ class ReadSettingsReply(Message):
 
 
 @register_msg
-class WriteSettingsRequest(Message):
+class SetSoundsRequest(Message):
     command_id = 0x010B
     direction_id = 0x0005
-    body_field = "personal_settings_write"
+    body_field = "set_sounds_request"
 
 
 @register_msg
-class WriteSettingsReply(Message):
+class SetSoundsReply(Message):
     command_id = 0x010B
     direction_id = 0x000a
     body_field = "empty"
@@ -762,7 +795,72 @@ class SetUnknownReplyAlpha(Message):
 class SetSettingsRequest(Message):
     command_id = 0x100B
     direction_id = 0x0005
-    body_field = "raw"
+    body_field = "set_settings_request"
+
+    # Ensure this message is 100% correct by default, these are the default.
+    # settings, the unknown bytes do NOT differ between two units.
+    # Also, the settings can also be found around 0xDA00 in the filesystem.
+    def __new__(self):
+        b = "00 00 00 00 14 01 00 00 03 00 10 01 00 01 0C 01 0B 01 02 00"\
+            " 02 00 01 01 02 01 02 01 2A 00 47 50 53 20 54 72 61 63 6B 20"\
+            " 50 4F 44 00 00 00 01 00 00 00 02 00 01 00 01 00 00 00 00 00"\
+            " 00 00 00 00 00 00 00 00 01 00 00 00 05 01 D0 00 06 01 3C 00"\
+            " 07 01 02 00 11 01 08 01 08 00 09 01 04 00 00 00 08 00 08 01"\
+            " 08 00 09 01 04 00 01 00 08 00 08 01 1A 00 09 01 04 00 02 00"\
+            " 00 00 0A 01 02 00 10 00 0A 01 02 00 01 00 0A 01 02 00 FE FF"\
+            " 06 01 42 00 07 01 02 00 23 01 08 01 08 00 09 01 04 00 00 00"\
+            " 08 00 08 01 08 00 09 01 04 00 01 00 28 00 08 01 20 00 09 01"\
+            " 04 00 02 00 00 00 0A 01 02 00 10 00 0A 01 02 00 08 00 0A 01"\
+            " 02 00 01 00 0A 01 02 00 FE FF 06 01 3C 00 07 01 02 00 22 01"\
+            " 08 01 08 00 09 01 04 00 00 00 18 00 08 01 08 00 09 01 04 00"\
+            " 01 00 19 00 08 01 1A 00 09 01 04 00 02 00 00 00 0A 01 02 00"\
+            " 32 00 0A 01 02 00 1A 00 0A 01 02 00 10 00 06 01 06 00 07 01"\
+            " 02 00 50 01"""
+        byte_object = bytes([int(a, 16) for a in b.split(" ")])
+        a = super().__new__(self)
+        ctypes.memmove(ctypes.addressof(a.set_settings_request), bytes(byte_object),
+                       len(byte_object))
+        return a
+
+
+    @property
+    def autostart(self):
+        return self.set_settings_request.autostart_ == 1
+
+    @autostart.setter
+    def autostart(self, enabled):
+        self.set_settings_request.autostart_ = 1 if enabled else 0
+
+    @property
+    def autolap(self):
+        return self.set_settings_request.autolap_
+
+    @autolap.setter
+    def autolap(self, meters):
+        self.set_settings_request.autolap_ = meters
+
+    @property
+    def autosleep(self):
+        return self.set_settings_request.autosleep_
+
+    @autosleep.setter
+    def autosleep(self, minutes):
+        if (minutes in [10, 30, 60]):
+            self.set_settings_request.autosleep_= minutes
+        else:
+            print("Invalid value for autosleep minute field, ignoring!")
+
+    @property
+    def interval(self):
+        return self.set_settings_request.log_interval1_
+
+    @interval.setter
+    def interval(self, seconds):
+        if (seconds in [1, 60]):
+            self.set_settings_request.log_interval1_= seconds
+            self.set_settings_request.log_interval2_= seconds
+        else:
+            print("Invalid value for logging interval, ignoring!")
 
 
 @register_msg

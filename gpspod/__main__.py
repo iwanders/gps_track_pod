@@ -83,11 +83,12 @@ def run_device_status(args):
 
 
 def run_debug_dev_func(args):
-    communicator = get_communicator(args)
-    gps = get_device(args, communicator)
-    with communicator:
-        print(gps[0:100])
-        gps.load_logs()
+    a = protocol.SetSettingsRequest()
+    a.autostart = False
+    print(a.autostart)
+    print(bytes(a))
+    print(" ".join(["{:>02X}".format(x) for x in bytes(a)]))
+    print(a)
 
 
 def run_show_tracks(args):

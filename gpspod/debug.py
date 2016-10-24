@@ -150,11 +150,14 @@ def print_interaction(path):
     # lets just start with outgoing always.
     combined_entries = order_entries_and_combine(data)
     start_time = combined_entries[0][0]
+    packet_counter = 0
     for time, direction, data in combined_entries:
+        packet_counter += 1
         reltime = time - start_time
         usb_packet = USBPacket.read(data)
         res = dir_specific[direction]["feed"].packet(usb_packet)
         if (res):
             message = load_msg(res)
             print(dir_specific[direction]["color"].format(
-                  "#{:0>6.3f} {:r}".format(reltime, message)))
+                  "#{:0>5d}, t: {:0>6.3f} {:r}".format(packet_counter,
+                                                       reltime, message)))
