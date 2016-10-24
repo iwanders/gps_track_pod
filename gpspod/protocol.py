@@ -203,23 +203,30 @@ def usbpacketizer(msgdata):
 class USBPacketFeed:
     def __init__(self):
         self.packets = []
+        self.first = None
 
     def packet(self, packet):
+        # print("USB packetfeed: {}".format(packet))
         if (packet.header.is_first()):
             # this is the first fragment of a packet.
             if ((len(self.packets) != 0)):
                 # problem right there, we already have fragments.
                 print("Detected new packet while old packet isn't finished.")
                 self.packets = []
-            self.packets.append(packet)
+            # self.packets.append((packet.header.get_part_counter(), packet))
+            self.first = packet
         else:
-            self.packets.append(packet)
+            self.packets.append((packet.header.get_part_counter(), packet))
+
+        # keep them ordered by their part counter.
+        self.packets.sort(key=lambda x: x[0])
 
         # we have the right number of fragments, combine the data and return.
-        if (len(self.packets) == self.packets[0].header.get_part_counter()):
+        if (len(self.packets) == self.first.header.get_part_counter()-1):
             # packet is finished!
             packet_data = []
-            for j in self.packets:
+            packet_data += self.first.data
+            for i, j in self.packets:
                 if (j.data):
                     packet_data += j.data
                 else:
@@ -229,11 +236,6 @@ class USBPacketFeed:
             self.packets = []
             return packet_data
 
-        if (len(self.packets) >= 2):
-            if (packet.header.get_part_counter() + 1 != len(self.packets)):
-                print("Sequence number not matching")
-                self.packets = []
-                return None
 
 
 #############################################################################
@@ -445,6 +447,10 @@ class Message(ctypes.LittleEndianStructure, Readable):
         ctypes.memmove(ctypes.addressof(a), bytes(byte_object),
                        min(len(byte_object), ctypes.sizeof(cls)))
         return a
+
+    @property
+    def body(self):
+        return getattr(self, self.body_field)
 
     def __str__(self):
         if (self.body_field == "raw"):
