@@ -623,7 +623,7 @@ class PMEMEntry(ctypes.LittleEndianStructure, Dictionary, Readable):
     ]
 
 
-class PMEMEntries():
+class PMEMEntriesBlock():
     def __init__(self, block, pos, log_header):
         self.block = block
         self.start_pos = pos
@@ -654,7 +654,7 @@ class PMEMEntries():
         return self.entries
 
 
-class PMEMTrackEntries(PMEMEntries):
+class PMEMTrackEntries(PMEMEntriesBlock):
     header_metadata = None
     periodic_entries = []
 
@@ -760,7 +760,7 @@ class InternalLogEntry:
             self.time, self.identifier, self.text)
 
 
-class PMEMLogEntries(PMEMEntries):
+class PMEMLogEntries(PMEMEntriesBlock):
 
     def load_header(self):
         self.header_bytes = self.get_entry()
