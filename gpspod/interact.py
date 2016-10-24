@@ -155,13 +155,24 @@ class RecordingCommunicator(Communicator):
         return super().__exit__(*args, **kwargs)
 
 
-# this one should be able to use a transaction log...
 class OfflineCommunicator(Communicator):
+    def __init__(self, entries={"outgoing":[], "incoming":[]}):
+        self.entries = entries
+        self.incoming_counter = 0
+        self.outgoing_counter = 0
+        super().__init__()
+
     def write_packet(self, packet):
+        d = self.entries["outgoing"][self.outgoing_counter]
+        if (bytes(packet) != bytes(d[1])):
+            print("Written data does not match recording")
+        self.outgoing_counter += 1
         return True
 
     def read_packet(self):
-        return b''
+        d = self.entries["incoming"][self.incoming_counter]
+        self.incoming_counter += 1
+        return d[1]
 
     def connect(self):
         pass

@@ -25,13 +25,14 @@
 from . import protocol
 from . import output
 from . import pmem
-from .interact import Communicator, RecordingCommunicator, OfflineCommunicator
+from . import interact
+from . import device
+from . import debug
 import argparse
 import time
 import datetime
 import sys
 import os
-from . import device
 
 
 def get_communicator(args):
@@ -40,13 +41,18 @@ def get_communicator(args):
     else:
         recordpath = args.recordfile
 
+    if (args.playbackfile is not None):
+        entries = debug.load_json_usb(args.playbackfile)
+        return interact.OfflineCommunicator(entries)
+
     if (args.fs is not None):
-        return OfflineCommunicator()
+        return interact.OfflineCommunicator()
+
 
     if (args.record):
-        return RecordingCommunicator(recordpath)
+        return interact.RecordingCommunicator(recordpath)
     else:
-        return Communicator()
+        return interact.Communicator()
 
 
 def get_device(args, communicator):
@@ -66,7 +72,7 @@ def run_device_info(args):
     with communicator:
         request = protocol.DeviceInfoRequest()
         communicator.write_msg(request)
-        print(communicator.read_msg())
+        print(communicator.read_msg().body)
 
 
 def run_device_status(args):
@@ -74,7 +80,7 @@ def run_device_status(args):
     with communicator:
         request = protocol.DeviceStatusRequest()
         communicator.write_msg(request)
-        print(communicator.read_msg())
+        print(communicator.read_msg().body)
 
 
 def run_debug_dev_func(args):
@@ -103,6 +109,10 @@ def run_retrieve_tracks(args):
         tracklist = gps.get_tracks()
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
+        if (abs(args.index >= len(tracklist))):
+            print("The track index is out of range.")
+            print("Valid track range is: 0-{}".format(len(tracklist)-1))
+            sys.exit(1)
         track = tracklist[args.index]
 
         metadata = track.get_header()
@@ -114,7 +124,7 @@ def run_retrieve_tracks(args):
                                       minute=metadata.minute,
                                       second=metadata.second)
         if (args.outfile is None):
-            output_path = base_time.strftime("track_%Y_%m_%d_%H_%M_%S.gpx")
+            output_path = base_time.strftime("track_%Y_%m_%d__%H_%M_%S.gpx")
         else:
             output_path = args.outfile
 
@@ -128,7 +138,7 @@ def run_retrieve_tracks(args):
         text = output.create_gpx_from_log(samples, metadata=metadata)
         print("Done creating gpx, writing")
 
-        with open(output_path, "wb") as f:
+        with open(output_path, "wt") as f:
             f.write(text)
 
 
@@ -199,6 +209,8 @@ parser.add_argument('--record', help="Record usb packets to aid debugging and\
 parser.add_argument('--recordfile', help="Default file to record to"
                     " (%%Y_%%m_%%d_%%H_%%M_%%S.json.gz)",
                     default=None)
+parser.add_argument('--playbackfile', help="Play transactions from this file",
+                    default=None)
 
 parser.add_argument('--fs', help="Specify a filesystem file to use.",
                     default=None)
@@ -219,7 +231,7 @@ retrieve_tracks.add_argument('index', type=int,
                              help='The index of the track to download')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                              help='The output file for FS, defaults to: '
-                             'track_%%Y_%%m_%%d_%%H_%%M_%%S.gpx')
+                             'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx')
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
 
