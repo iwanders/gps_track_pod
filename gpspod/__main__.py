@@ -83,16 +83,33 @@ def run_device_status(args):
 
 
 def run_debug_dev_func(args):
-    a = protocol.SetSettingsRequest()
-    a.autostart = False
-    print(a.autostart)
-    print(bytes(a))
-    print(" ".join(["{:>02X}".format(x) for x in bytes(a)]))
+    communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    #memfs = pmem.MEMfs(gps)
+    #file = pmem.BPMEMfile(memfs)
+    import struct
+    import ctypes
+    pos = 0x2000+2
+    # print(gps.data[pos:pos+2])
+    length, = struct.unpack("<H", gps.data[pos:pos+2])
+    print(length)
+    pos += 2
+
+    # TODO: Manage log wrap... how does this manifest itself?!
+    data = gps.data[pos:pos+length]
+    print(data)
+    print(" ".join(["{:0>2X}".format(b) for b in data]))
+    pos += length
+
+    a = protocol.BodySetLogSettingsRequest()
+    ctypes.memmove(ctypes.addressof(a)+8+4, bytes(data),
+                   min(len(data), ctypes.sizeof(a)))
+    # and 8+4 corresponds to the data position.
+    # the 8 is because of the position, length 
+    # the 4 field is because of the 03 entry type and 0x110 entry length.
+
+    # the 8+4 is also present in the write settings block.
     print(a)
-    b = protocol.SetSettingsRequest()
-    print(bytes(b))
-    print(b)
-    print(" ".join(["{:>02X}".format(x) for x in bytes(b)]))
 
 
 def run_show_tracks(args):
@@ -133,10 +150,11 @@ def run_set_sounds(args):
         else:
             print("Wrong response recevied, probably an USB error?")
 
+
 def run_settings(args):
-    #alpha
-    #setlogparam
-    #bravo
+    # alpha
+    # setlogparam
+    # bravo
     request = protocol.SetLogSettingsRequest()
     if (args.autostart in ["1", "true", "on"]):
         request.autostart = True
@@ -293,7 +311,7 @@ retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
 soundstate = subparsers.add_parser("soundstate",
-                                      help="Show current settings")
+                                   help="Show current settings")
 soundstate.set_defaults(func=run_soundstate)
 
 set_sounds = subparsers.add_parser("sounds", help="Enable or disable sounds")
@@ -303,7 +321,7 @@ set_sounds.set_defaults(func=run_set_sounds)
 
 
 settings = subparsers.add_parser("settings",
-                                 help="Sets the logging parameters. "\
+                                 help="Sets the logging parameters. "
                                  "Without arguments sets to default settings.")
 settings.add_argument('--autolap', type=int, default=0,
                       help='Autolap distance in meters. (default: 0)')
