@@ -212,6 +212,7 @@ class USBPacketFeed:
             if ((len(self.packets) != 0)):
                 # problem right there, we already have fragments.
                 print("Detected new packet while old packet isn't finished.")
+                self.first = None
                 self.packets = []
             # self.packets.append((packet.header.get_part_counter(), packet))
             self.first = packet
@@ -222,7 +223,8 @@ class USBPacketFeed:
         self.packets.sort(key=lambda x: x[0])
 
         # we have the right number of fragments, combine the data and return.
-        if (len(self.packets) == self.first.header.get_part_counter()-1):
+        if (self.first is not None) and \
+                (len(self.packets) == self.first.header.get_part_counter()-1):
             # packet is finished!
             packet_data = []
             packet_data += self.first.data
@@ -235,7 +237,6 @@ class USBPacketFeed:
                     return None
             self.packets = []
             return packet_data
-
 
 
 #############################################################################
@@ -353,27 +354,6 @@ class BodyLogHeaderEntry(ctypes.LittleEndianStructure, Dictionary):
                                                         self.length,
                                                         data_str)
 
-
-class BodyPersonalSettingsRead(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("data", ctypes.c_uint8*70)
-    ]
-
-    def __str__(self):
-        return "".join([" {:>02X}".format(a) for a in self.data])
-
-
-class BodyPersonalSettingsWrite(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("data", ctypes.c_uint8*284)
-    ]
-
-    def __str__(self):
-        return "".join([" {:>02X}".format(a) for a in self.data])
-
-
 class BodyDataRequest(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
@@ -397,37 +377,45 @@ class BodyDataReply(ctypes.LittleEndianStructure, Dictionary):
         return "0x{:>04X},0x{:>04X},".format(self.position, self.length)
         # + " ".join(["{:>02X}".format(a) for a in self.data])
 
-class BodySetSoundsRequest(ctypes.LittleEndianStructure, Dictionary):
-    _pack_ = 1
-    _fields_ = [
-        ("frontpadding", ctypes.c_uint8*26),
-        ("sounds", ctypes.c_uint8), # Should equal 2 for off, 1 for on.
-        ("rearpadding", ctypes.c_uint8*(70 - 26 - 1)),
-    ]
-
-    def __str__(self):
-        return "Soundstate: 0x{:>02X}".format(self.sounds)
-        # + " ".join(["{:>02X}".format(a) for a in self.data])
-
 
 class BodySetSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
-        ("frontpadding", ctypes.c_uint8*52),
+        ("frontpadding", ctypes.c_uint8*26),
+        ("sounds_", ctypes.c_uint8),  # Should equal 2 for off, 1 for on.
+        ("rearpadding", ctypes.c_uint8*(70 - 26 - 1)),
+    ]
+
+    def __str__(self):
+        return "Sounds: {}".format("on" if (self.sounds_ == 1) else "off")
+        # + " ".join(["{:>02X}".format(a) for a in self.data])
+
+
+class BodySetLogSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
+    _pack_ = 1
+    _fields_ = [
+        ("frontpadding", ctypes.c_uint8 * 52),
         ("log_interval1_", ctypes.c_uint16),
         ("log_interval2_", ctypes.c_uint16),
         ("autolap_", ctypes.c_uint16),
-        ("midpadding", ctypes.c_uint8*10),
-        ("autostart_", ctypes.c_uint8), # 1 for on, 0 for off.
+        ("midpadding", ctypes.c_uint8 * 10),
+        ("autostart_", ctypes.c_uint8),  # 1 for on, 0 for off.
         ("more_zeros", ctypes.c_uint8),
-        ("autosleep_", ctypes.c_uint16), # is in minutes
-        ("rearpadding", ctypes.c_uint8*(284 - 52 -2 -2 -2 -10 -1 -1 -2)),
+        ("autosleep_", ctypes.c_uint16),  # is in minutes
+        ("rearpadding", ctypes.c_uint8 * (284 - 52 \
+                                          - 2 - 2 - 2 - 10 - 1 - 1 - 2)),
     ]
 
     def __str__(self):
         # print(" ".join(["{:>02X}".format(a) for a in self.frontpadding]))
-        return "Log interval1: {:d}, Log interval1: {:d}, autolap: {:d}, autostart:{:d}, autosleep:{:d}".format(self.log_interval1_, self.log_interval2_, self.autolap_, self.autostart_,self.autosleep_)
+        return "Log interval1: {:d}, Log interval1: {:d}, autolap: {:d},"\
+                " autostart:{:d}, autosleep:{:d}".format(self.log_interval1_,
+                                                         self.log_interval2_,
+                                                         self.autolap_,
+                                                         self.autostart_,
+                                                         self.autosleep_)
         return ""
+
 
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
@@ -447,10 +435,8 @@ class MessageBody_(ctypes.Union):
                 ("data_request", BodyDataRequest),
                 ("data_reply", BodyDataReply),
                 ("empty", BodyEmpty),
-                ("personal_settings_read", BodyPersonalSettingsRead),
-                ("personal_settings_write", BodyPersonalSettingsWrite),
-                ("set_sounds_request", BodySetSoundsRequest),
-                ("set_settings_request", BodySetSettingsRequest),
+                ("personal_settings", BodySetSettingsRequest),
+                ("set_settings_request", BodySetLogSettingsRequest),
                 ]
 
 
@@ -754,19 +740,39 @@ class ReadSettingsRequest(Message):
 class ReadSettingsReply(Message):
     command_id = 0x000B
     direction_id = 0x000A
-    body_field = "personal_settings_read"
+    body_field = "personal_settings"
 # ------
 
 
 @register_msg
-class SetSoundsRequest(Message):
+class SetSettingsRequest(Message):
     command_id = 0x010B
     direction_id = 0x0005
-    body_field = "set_sounds_request"
+    body_field = "personal_settings"
+
+    def __new__(self):
+        b = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"\
+            " 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"\
+            " 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"\
+            " 00 00 00 00 00 00 00"
+        byte_object = bytes([int(a, 16) for a in b.split(" ")])
+        a = super().__new__(self)
+        ctypes.memmove(ctypes.addressof(a.set_settings_request),
+                       bytes(byte_object), len(byte_object))
+        return a
+
+    # Should equal 2 for off, 1 for on.
+    @property
+    def sounds(self):
+        return self.personal_settings.sounds_ == 1
+
+    @sounds.setter
+    def sounds(self, enabled):
+        self.personal_settings.sounds_ = 1 if enabled else 2
 
 
 @register_msg
-class SetSoundsReply(Message):
+class SetSettingsReply(Message):
     command_id = 0x010B
     direction_id = 0x000a
     body_field = "empty"
@@ -791,13 +797,41 @@ class SetUnknownReplyAlpha(Message):
 # ------
 
 
+
+"""
+    # A forced settings synchronization contains the following:
+    devicestatus
+    lockstatus
+    readsound
+    setsound
+    alpha
+    setlogparam
+    bravo
+    readsgee
+    lockstatus
+    devicestatus
+
+    So, we assume we can discard the status message, as with the sounds
+    readsgee is only triggered because they try to update it. Lock is only
+    sent because this displays a notice on the watches?
+
+    So reduced:
+    alpha
+    setlogparam
+    bravo
+
+    The alpha and bravo are both unknown commands, but lets stick with sending
+    them, they might be required to write the settings to the disk or
+    something like that.
+"""
+
 @register_msg
-class SetSettingsRequest(Message):
+class SetLogSettingsRequest(Message):
     command_id = 0x100B
     direction_id = 0x0005
     body_field = "set_settings_request"
 
-    # Ensure this message is 100% correct by default, these are the default.
+    # Try to make this message correct by default, these are the default
     # settings, the unknown bytes do NOT differ between two units.
     # Also, the settings can also be found around 0xDA00 in the filesystem.
     def __new__(self):
@@ -815,13 +849,12 @@ class SetSettingsRequest(Message):
             " 08 01 08 00 09 01 04 00 00 00 18 00 08 01 08 00 09 01 04 00"\
             " 01 00 19 00 08 01 1A 00 09 01 04 00 02 00 00 00 0A 01 02 00"\
             " 32 00 0A 01 02 00 1A 00 0A 01 02 00 10 00 06 01 06 00 07 01"\
-            " 02 00 50 01"""
+            " 02 00 50 01"
         byte_object = bytes([int(a, 16) for a in b.split(" ")])
         a = super().__new__(self)
-        ctypes.memmove(ctypes.addressof(a.set_settings_request), bytes(byte_object),
-                       len(byte_object))
+        ctypes.memmove(ctypes.addressof(a.set_settings_request),
+                       bytes(byte_object), len(byte_object))
         return a
-
 
     @property
     def autostart(self):
@@ -845,8 +878,8 @@ class SetSettingsRequest(Message):
 
     @autosleep.setter
     def autosleep(self, minutes):
-        if (minutes in [10, 30, 60]):
-            self.set_settings_request.autosleep_= minutes
+        if (minutes in [0, 10, 30, 60]):
+            self.set_settings_request.autosleep_ = minutes
         else:
             print("Invalid value for autosleep minute field, ignoring!")
 
@@ -857,14 +890,14 @@ class SetSettingsRequest(Message):
     @interval.setter
     def interval(self, seconds):
         if (seconds in [1, 60]):
-            self.set_settings_request.log_interval1_= seconds
-            self.set_settings_request.log_interval2_= seconds
+            self.set_settings_request.log_interval1_ = seconds
+            self.set_settings_request.log_interval2_ = seconds
         else:
             print("Invalid value for logging interval, ignoring!")
 
 
 @register_msg
-class SetSettingsReply(Message):
+class SetLogSettingsReply(Message):
     command_id = 0x100B
     direction_id = 0x000a
     body_field = "empty"
@@ -997,7 +1030,7 @@ SGEE data is likely synced with:
 @register_msg
 class SetUnknownRequestCharlie(Message):
     """
-        Does not occur after only SGEE sync.
+        Does not occur after only SGEE is synced.
         Does always occur when EEPROM is retrieved?
 
         Perhaps to indicate that the device is synced?

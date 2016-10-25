@@ -161,3 +161,4 @@ def print_interaction(path):
             print(dir_specific[direction]["color"].format(
                   "#{:0>5d}, t: {:0>6.3f} {:r}".format(packet_counter,
                                                        reltime, message)))
+            print(" ".join(["{:0>2X}".format(a) for a in bytes(message)]))

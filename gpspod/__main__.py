@@ -89,6 +89,10 @@ def run_debug_dev_func(args):
     print(bytes(a))
     print(" ".join(["{:>02X}".format(x) for x in bytes(a)]))
     print(a)
+    b = protocol.SetSettingsRequest()
+    print(bytes(b))
+    print(b)
+    print(" ".join(["{:>02X}".format(x) for x in bytes(b)]))
 
 
 def run_show_tracks(args):
@@ -99,6 +103,79 @@ def run_show_tracks(args):
         tracklist = gps.get_tracks()
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
+
+
+def run_soundstate(args):
+    communicator = get_communicator(args)
+    with communicator:
+        request = protocol.ReadSettingsRequest()
+        communicator.write_msg(request)
+        msg = communicator.read_msg()
+        res = msg.body
+        print(res)
+        print(" ".join(["{:0>2X}".format(a) for a in bytes(msg)]))
+
+
+def run_set_sounds(args):
+    request = protocol.SetSettingsRequest()
+    if (args.state in ["1", "true", "on"]):
+        request.sounds = True
+    elif (args.state in ["0", "false", "off"]):
+        request.sounds = False
+    else:
+        print("State should be 0/1, true/false, on/off")
+        sys.exit(1)
+    communicator = get_communicator(args)
+    with communicator:
+        communicator.write_msg(request)
+        if (type(communicator.read_msg()) == protocol.SetSettingsReply):
+            print("Succesfully set sound state.")
+        else:
+            print("Wrong response recevied, probably an USB error?")
+
+def run_settings(args):
+    #alpha
+    #setlogparam
+    #bravo
+    request = protocol.SetLogSettingsRequest()
+    if (args.autostart in ["1", "true", "on"]):
+        request.autostart = True
+    elif (args.autostart in ["0", "false", "off"]):
+        request.autostart = False
+    else:
+        print("Autostart should be 0/1, true/false, on/off, exiting.")
+        sys.exit(1)
+
+    if (args.autosleep not in [0, 10, 30, 60]):
+        print("Autosleep should be 0, 10, 30 or 60, exiting.")
+        sys.exit(1)
+
+    if (args.interval not in [1, 60]):
+        print("Interval should be 1 or 60, exiting.")
+        sys.exit(1)
+    if ((args.autolap < 0) or (args.autolap > 2**16)):
+        print("Autolap should be in 0-65536 (perhaps 2**32, should test...).")
+        sys.exit(1)
+
+    request.autolap = args.autolap
+    request.autosleep = args.autosleep
+    request.interval = args.interval
+
+    communicator = get_communicator(args)
+    with communicator:
+        communicator.write_msg(protocol.SetUnknownRequestAlpha())
+        if (type(communicator.read_msg()) != protocol.SetUnknownReplyAlpha):
+            print("Wrong response in preparing to send the settings.")
+            raise BaseError("Quitting, but with grace so the log is stored.")
+        communicator.write_msg(request)
+        if (type(communicator.read_msg()) != protocol.SetLogSettingsReply):
+            print("Wrong response to write settings...")
+            raise BaseError("Quitting, but with grace so the log is stored.")
+        communicator.write_msg(protocol.SetUnknownRequestBravo())
+        if (type(communicator.read_msg()) != protocol.SetUnknownReplyBravo):
+            print("Wrong response in finishing settings procedure.")
+            raise BaseError("Quitting, but with grace so the log is stored.")
+        print("Done setting the settings =)")
 
 
 def run_retrieve_tracks(args):
@@ -160,7 +237,7 @@ def run_debug_view_messages(args):
     print_interaction(args.file)
 
 
-def run_debug_retrieve_fs(args):
+def run_debug_dump_fs(args):
     communicator = get_communicator(args)
     gps = get_device(args, communicator)
     with communicator:
@@ -168,6 +245,7 @@ def run_debug_retrieve_fs(args):
 
     with open(args.file, "bw") as f:
         f.write(data)
+
 
 def run_debug_internallog(args):
     communicator = get_communicator(args)
@@ -179,7 +257,6 @@ def run_debug_internallog(args):
             log.load_entries()
             for m in log.get_entries():
                 print(m)
-    
 
 # argument parsing
 parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
@@ -215,6 +292,29 @@ retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                              'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx')
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
+soundstate = subparsers.add_parser("soundstate",
+                                      help="Show current settings")
+soundstate.set_defaults(func=run_soundstate)
+
+set_sounds = subparsers.add_parser("sounds", help="Enable or disable sounds")
+set_sounds.add_argument('state', type=str,
+                        help='true or false...')
+set_sounds.set_defaults(func=run_set_sounds)
+
+
+settings = subparsers.add_parser("settings",
+                                 help="Sets the logging parameters. "\
+                                 "Without arguments sets to default settings.")
+settings.add_argument('--autolap', type=int, default=0,
+                      help='Autolap distance in meters. (default: 0)')
+settings.add_argument('--autostart', type=str, default="on",
+                      help='Autostart logging after fix if (default: on).')
+settings.add_argument('--autosleep', type=int, default=0,
+                      help='Sleep after 10/30/60 minute idle (default: 0).')
+settings.add_argument('--interval', type=int, default=1,
+                      help='Set the logging interval 1s/60s (default: 1)')
+settings.set_defaults(func=run_settings)
+
 
 # create subparser for debug
 debug_command = subparsers.add_parser("debug", help="Various debug tools.")
@@ -241,14 +341,14 @@ debug_reconstruct_fs.add_argument(
 debug_reconstruct_fs.set_defaults(func=run_debug_reconstruct_fs)
 
 debug_retrieve_fs = debug_subcommand.add_parser(
-                        "retrieve",
-                        help="Pull all bytes from the filesystem")
+                        "dump",
+                        help="Dump all bytes from the filesystem to a file.")
 debug_retrieve_fs.add_argument('file',
                                type=str,
                                help='The file to write to.')
 debug_retrieve_fs.add_argument('--upto', type=int, default=0x3c0000,
                                help="Retrieve up to this address (0x3c0000)")
-debug_retrieve_fs.set_defaults(func=run_debug_retrieve_fs)
+debug_retrieve_fs.set_defaults(func=run_debug_dump_fs)
 
 debug_internallog = debug_subcommand.add_parser(
                         "internallog",
