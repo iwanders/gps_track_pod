@@ -230,6 +230,9 @@ def run_retrieve_tracks(args):
 
         track.load_entries()
         samples = track.get_entries()
+        for s in samples:
+            print(s)
+        print("Acquired the data, writing gpx. ".format(len(samples)))
         text = output.create_gpx_from_log(samples, metadata=metadata)
         print("Done creating gpx, writing")
 

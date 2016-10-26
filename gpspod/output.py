@@ -74,6 +74,7 @@ def create_gpx_from_log(logentries, metadata):
         # print(seg)
         if ("latitude" not in seg) or ("longitude" not in seg) or (
                                                             "time" not in seg):
+            print("Skipping segment: {}".format(seg))
             continue
 
         trkpt = ET.SubElement(trkseg, "trkpt")
