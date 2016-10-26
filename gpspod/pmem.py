@@ -350,7 +350,7 @@ class DataStructure(ctypes.LittleEndianStructure, Readable, Dictionary):
 
 class GpsUserData(DataStructure):
     _fields_ = [
-                ("Time", TimeField),
+                ("time", TimeField),
                 ("latitude", LatitudeField),
                 ("longitude", LongitudeField),
                 ("gpsaltitude", ctypes.c_int16),
@@ -540,8 +540,11 @@ class BPMEMfile():
     offset = 0xba00
 
     def __init__(self, fs):
-        self.tracks = PMEMTrack(self, offset=0xf4240)
-        self.logs = PMEMInternalLog(self, offset=0x927c0)
+        self.logs = PMEMInternalLog(self, offset=0x927c0, size=0xFFFFFF)
+        # Unknown how long it really is...
+
+        self.tracks = PMEMTrack(self, offset=0xf4240, size=0x29f630)
+        # tracks run up to the end of the file in the FS.
         self.fs = fs
 
     def __getitem__(self, key):
@@ -588,9 +591,12 @@ class PMEMSubBlockHeader(ctypes.LittleEndianStructure, Dictionary, Readable):
 
 
 class PMEMBlock():
-    def __init__(self, file, offset):
+    def __init__(self, file, offset, size):
         self.file = file
         self.offset = offset
+        self.size = size
+        self.data_start = self.offset + ctypes.sizeof(PMEMBlockHeader)
+        self.data_end = self.offset + size
         self.logs = []
 
     def load_block_header(self):
@@ -612,6 +618,27 @@ class PMEMBlock():
                 self, pos+ctypes.sizeof(PMEMSubBlockHeader), log_header))
 
             pos = log_header.next
+
+    def __getitem__(self, key):
+
+        # handle wrapping... Just wrap it to after the own header.
+        def wrap(x, min=self.data_start, max=self.data_end):
+            return min + (x - min) % (max - min)
+
+        # We only deal with positive overflow; that is it running out of the
+        # size allocated to it.
+
+        # it does not both fit in the original AND overflow:
+        if ((key.stop > self.data_end) and (key.start < self.data_end)):
+            # have to get two parts..
+            p1 = self[slice(wrap(key.start), self.data_end, key.step)]
+            p2 = self[slice(self.data_start, wrap(key.stop), key.step)]
+            return p1 + p2
+
+        # Perform normal wrapping, without the wrap in the middle.
+        start_index = wrap(key.start)
+        stop_index = wrap(key.stop)
+        return self.file[slice(start_index, stop_index, key.step)]
 
 
 class PMEMEntry(ctypes.LittleEndianStructure, Dictionary, Readable):
@@ -635,11 +662,10 @@ class PMEMEntriesBlock():
     def get_entry(self):
         self.retrieved_entry_count += 1
         # everything is an entry: headers are too!
-        length, = struct.unpack("<H", self.block.file[self.pos:self.pos+2])
+        length, = struct.unpack("<H", self.block[self.pos:self.pos+2])
         self.pos += 2
 
-        # TODO: Manage log wrap... how does this manifest itself?!
-        data = self.block.file[self.pos:self.pos+length]
+        data = self.block[self.pos:self.pos+length]
         self.pos += length
         return data
 
