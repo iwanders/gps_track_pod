@@ -420,8 +420,8 @@ class BodySetLogSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
                                                          self.autosleep_)
 
     def __str__(self):
-        return "interval: {: >2d}s, autostart: {: >3}, autosleep: {:d} min,"\
-                " autolap: {: >3d} m".format(self.log_interval1_,
+        return "interval: {: >2d}s, autostart: {: >3}, autosleep: {:d} min, "\
+                "autolap: {: >3d} m".format(self.log_interval1_,
                                             "on" if self.autostart_ else "off",
                                             self.autosleep_,
                                             self.autolap_)

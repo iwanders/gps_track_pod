@@ -256,7 +256,9 @@ def run_debug_internallog(args):
                 print(m)
 
 # argument parsing
-parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
+parser = argparse.ArgumentParser(
+            description="GPS Pod: Interact with SUUNTO's GPS Track Pod."
+                                )
 
 parser.add_argument('--record', help="Record usb packets to aid debugging and\
                     analysis.", default=False)

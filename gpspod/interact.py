@@ -156,7 +156,7 @@ class RecordingCommunicator(Communicator):
 
 
 class OfflineCommunicator(Communicator):
-    def __init__(self, entries={"outgoing":[], "incoming":[]}):
+    def __init__(self, entries={"outgoing": [], "incoming": []}):
         self.entries = entries
         self.incoming_counter = 0
         self.outgoing_counter = 0
