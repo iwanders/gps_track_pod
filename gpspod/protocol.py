@@ -354,6 +354,7 @@ class BodyLogHeaderEntry(ctypes.LittleEndianStructure, Dictionary):
                                                         self.length,
                                                         data_str)
 
+
 class BodyDataRequest(ctypes.LittleEndianStructure, Dictionary):
     _pack_ = 1
     _fields_ = [
@@ -392,9 +393,12 @@ class BodySetSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
 
 
 class BodySetLogSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
+    settings_true_size = (52 - 4 - 4 + 2 + 2 + 2 + 10 + 1 + 1 + 2)
     _pack_ = 1
     _fields_ = [
-        ("frontpadding", ctypes.c_uint8 * 52),
+        ("write_position", ctypes.c_uint32),
+        ("write_length", ctypes.c_uint32),
+        ("start_of_settings", ctypes.c_uint8 * (52 - 4 - 4)),
         ("log_interval1_", ctypes.c_uint16),
         ("log_interval2_", ctypes.c_uint16),
         ("autolap_", ctypes.c_uint16),
@@ -406,7 +410,7 @@ class BodySetLogSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
                                           - 2 - 2 - 2 - 10 - 1 - 1 - 2)),
     ]
 
-    def __str__(self):
+    def __repr__(self):
         # print(" ".join(["{:>02X}".format(a) for a in self.frontpadding]))
         return "Log interval1: {:d}, Log interval1: {:d}, autolap: {:d},"\
                 " autostart:{:d}, autosleep:{:d}".format(self.log_interval1_,
@@ -414,7 +418,20 @@ class BodySetLogSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
                                                          self.autolap_,
                                                          self.autostart_,
                                                          self.autosleep_)
-        return ""
+
+    def __str__(self):
+        return "interval: {: >2d}s, autostart: {: >3}, autosleep: {:d} min,"\
+                " autolap: {: >3d} m".format(self.log_interval1_,
+                                            "on" if self.autostart_ else "off",
+                                            self.autosleep_,
+                                            self.autolap_)
+
+    @classmethod
+    def load_settings(cls, b):
+        a = cls()
+        ctypes.memmove(ctypes.addressof(a.start_of_settings), bytes(b),
+                       min(len(b), ctypes.sizeof(a)))
+        return a
 
 
 class BodyEmpty(ctypes.LittleEndianStructure, Dictionary):
@@ -797,7 +814,6 @@ class SetUnknownReplyAlpha(Message):
 # ------
 
 
-
 """
     # A forced settings synchronization contains the following:
     devicestatus
@@ -825,6 +841,7 @@ class SetUnknownReplyAlpha(Message):
     something like that.
 """
 
+
 @register_msg
 class SetLogSettingsRequest(Message):
     command_id = 0x100B
@@ -834,6 +851,11 @@ class SetLogSettingsRequest(Message):
     # Try to make this message correct by default, these are the default
     # settings, the unknown bytes do NOT differ between two units.
     # Also, the settings can also be found around 0xDA00 in the filesystem.
+
+    # By now it is discerned that this message corresponds to the 0x2000
+    # position in the filesystem. Combined with the fact that this one starts
+    # with 0x00000000, 0x00000114 (276 = message length from 03)
+    # From there on, so from 03 00 10 .. it aligns with the FS from 0x2000
     def __new__(self):
         b = "00 00 00 00 14 01 00 00 03 00 10 01 00 01 0C 01 0B 01 02 00"\
             " 02 00 01 01 02 01 02 01 2A 00 47 50 53 20 54 72 61 63 6B 20"\

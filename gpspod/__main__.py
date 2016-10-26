@@ -85,8 +85,8 @@ def run_device_status(args):
 def run_debug_dev_func(args):
     communicator = get_communicator(args)
     gps = get_device(args, communicator)
-    #memfs = pmem.MEMfs(gps)
-    #file = pmem.BPMEMfile(memfs)
+    # memfs = pmem.MEMfs(gps)
+    # file = pmem.BPMEMfile(memfs)
     import struct
     import ctypes
     pos = 0x2000+2
@@ -110,6 +110,7 @@ def run_debug_dev_func(args):
 
     # the 8+4 is also present in the write settings block.
     print(a)
+    print(gps.get_settings())
 
 
 def run_show_tracks(args):
@@ -152,48 +153,57 @@ def run_set_sounds(args):
 
 
 def run_settings(args):
-    # alpha
-    # setlogparam
-    # bravo
-    request = protocol.SetLogSettingsRequest()
-    if (args.autostart in ["1", "true", "on"]):
-        request.autostart = True
-    elif (args.autostart in ["0", "false", "off"]):
-        request.autostart = False
+    if (args.write):
+        # alpha
+        # setlogparam
+        # bravo
+        request = protocol.SetLogSettingsRequest()
+        if (args.autostart in ["1", "true", "on"]):
+            request.autostart = True
+        elif (args.autostart in ["0", "false", "off"]):
+            request.autostart = False
+        else:
+            print("Autostart should be 0/1, true/false, on/off, exiting.")
+            sys.exit(1)
+
+        if (args.autosleep not in [0, 10, 30, 60]):
+            print("Autosleep should be 0, 10, 30 or 60, exiting.")
+            sys.exit(1)
+
+        if (args.interval not in [1, 60]):
+            print("Interval should be 1 or 60, exiting.")
+            sys.exit(1)
+        if ((args.autolap < 0) or (args.autolap > 2**16)):
+            print("Autolap should be in 0-65536 (perhaps 2**32? needs test.).")
+            sys.exit(1)
+
+        request.autolap = args.autolap
+        request.autosleep = args.autosleep
+        request.interval = args.interval
+
+    comm = get_communicator(args)
+    gps = get_device(args, comm)
+    if (args.write):
+        with comm:
+            comm.write_msg(protocol.SetUnknownRequestAlpha())
+            if (type(comm.read_msg()) != protocol.SetUnknownReplyAlpha):
+                print("Wrong response in preparing to send the settings.")
+                raise BaseError("Quitting, but with grace so the log is"
+                                "stored.")
+            comm.write_msg(request)
+            if (type(comm.read_msg()) != protocol.SetLogSettingsReply):
+                print("Wrong response to write settings...")
+                raise BaseError("Quitting, but with grace so the log is"
+                                "stored.")
+            comm.write_msg(protocol.SetUnknownRequestBravo())
+            if (type(comm.read_msg()) != protocol.SetUnknownReplyBravo):
+                print("Wrong response in finishing settings procedure.")
+                raise BaseError("Quitting, but with grace so the log is"
+                                "stored.")
+            print("Settings should be {}".format(request.set_settings_request))
     else:
-        print("Autostart should be 0/1, true/false, on/off, exiting.")
-        sys.exit(1)
-
-    if (args.autosleep not in [0, 10, 30, 60]):
-        print("Autosleep should be 0, 10, 30 or 60, exiting.")
-        sys.exit(1)
-
-    if (args.interval not in [1, 60]):
-        print("Interval should be 1 or 60, exiting.")
-        sys.exit(1)
-    if ((args.autolap < 0) or (args.autolap > 2**16)):
-        print("Autolap should be in 0-65536 (perhaps 2**32, should test...).")
-        sys.exit(1)
-
-    request.autolap = args.autolap
-    request.autosleep = args.autosleep
-    request.interval = args.interval
-
-    communicator = get_communicator(args)
-    with communicator:
-        communicator.write_msg(protocol.SetUnknownRequestAlpha())
-        if (type(communicator.read_msg()) != protocol.SetUnknownReplyAlpha):
-            print("Wrong response in preparing to send the settings.")
-            raise BaseError("Quitting, but with grace so the log is stored.")
-        communicator.write_msg(request)
-        if (type(communicator.read_msg()) != protocol.SetLogSettingsReply):
-            print("Wrong response to write settings...")
-            raise BaseError("Quitting, but with grace so the log is stored.")
-        communicator.write_msg(protocol.SetUnknownRequestBravo())
-        if (type(communicator.read_msg()) != protocol.SetUnknownReplyBravo):
-            print("Wrong response in finishing settings procedure.")
-            raise BaseError("Quitting, but with grace so the log is stored.")
-        print("Done setting the settings =)")
+        with comm:
+            print(gps.get_settings())
 
 
 def run_retrieve_tracks(args):
@@ -326,6 +336,8 @@ set_sounds.set_defaults(func=run_set_sounds)
 settings = subparsers.add_parser("settings",
                                  help="Sets the logging parameters. "
                                  "Without arguments sets to default settings.")
+settings.add_argument('--write', default=False, action="store_true",
+                      help="Write settings instead of showing them.")
 settings.add_argument('--autolap', type=int, default=0,
                       help='Autolap distance in meters. (default: 0)')
 settings.add_argument('--autostart', type=str, default="on",

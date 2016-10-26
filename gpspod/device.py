@@ -57,11 +57,13 @@ class GpsPod:
                 else:
                     error_count += 1
                     print("Will retry this block: {:>0X}"
-                          ", current_error count: {}".format(i, error_count))
+                          ", current_error count: {}".format(block_index,
+                                                             error_count))
                 time.sleep(0.01)
             except usb.core.USBError:
                 pass
                 time.sleep(0.01)
+        print("Failed retrieving block: {:>0X}".format(block_index))
         return False
 
     def have_data(self, key):
@@ -107,13 +109,19 @@ class GpsPod:
     def get_tracks(self):
         return self.tracks
 
-
     def load_debug_logs(self):
         self.data.logs.load_block_header()
         self.data.logs.load_logs()
         for log in self.data.logs.logs:
             if log.load_header():
                 self.debug_logs.append(log)
-        
+
     def get_debug_logs(self):
         return self.debug_logs
+
+    def get_settings(self):
+        # We know that the settings data is at 0x2000 in the file...
+        # Use that to return a message of the correct size.
+        settings_type = protocol.BodySetLogSettingsRequest
+        setting = self.data[0x2000:0x2000 + settings_type.settings_true_size]
+        return settings_type.load_settings(setting)
