@@ -264,10 +264,10 @@ parser.add_argument('--record', help="Record usb packets to aid debugging and\
                     analysis.", default=False)
 
 parser.add_argument('--recordfile', help="Default file to record to"
-                    " (%%Y_%%m_%%d_%%H_%%M_%%S.json.gz)",
+                    " (%%Y_%%m_%%d__%%H_%%M_%%S.json.gz).",
                     default=None)
 
-parser.add_argument('--playbackfile', help="Play transactions from this file",
+parser.add_argument('--playbackfile', help="Play transactions from this file.",
                     default=None)
 
 parser.add_argument('--fs', help="Specify a filesystem file to use.",
@@ -276,20 +276,20 @@ parser.add_argument('--fs', help="Specify a filesystem file to use.",
 subparsers = parser.add_subparsers(dest="command")
 
 
-device_info = subparsers.add_parser("info", help="Print device info")
+device_info = subparsers.add_parser("info", help="Print device info.")
 device_info.set_defaults(func=run_device_info)
-device_status = subparsers.add_parser("status", help="Print device status")
+device_status = subparsers.add_parser("status", help="Print device status.")
 device_status.set_defaults(func=run_device_status)
 
-show_tracks = subparsers.add_parser("tracks", help="Show available tracks")
+show_tracks = subparsers.add_parser("tracks", help="Show available tracks.")
 show_tracks.set_defaults(func=run_show_tracks)
 
-retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track")
+retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track.")
 retrieve_tracks.add_argument('index', type=int,
-                             help='The index of the track to download')
+                             help='The index of the track to download.')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                              help='The output file for FS, defaults to: '
-                             'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx')
+                             'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx.')
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
 set_sounds = subparsers.add_parser("sounds", help="Enable or disable sounds. "
@@ -309,9 +309,9 @@ settings.add_argument('--write', default=False, action="store_true",
 settings.add_argument('--autolap', type=int, default=0,
                       help='Autolap distance in meters. (default: 0)')
 settings.add_argument('--autostart', type=str, default="on",
-                      help='Autostart logging after fix if (default: on).')
+                      help='Autostart logging after fix if (default: on)')
 settings.add_argument('--autosleep', type=int, default=0,
-                      help='Sleep after 10/30/60 minute idle (default: 0).')
+                      help='Sleep after 10/30/60 minute idle (default: 0)')
 settings.add_argument('--interval', type=int, default=1,
                       help='Set the logging interval 1s/60s (default: 1)')
 settings.set_defaults(func=run_settings)
@@ -323,15 +323,17 @@ debug_command = subparsers.add_parser("debug", help="Various debug tools.")
 debug_subcommand = debug_command.add_subparsers(dest="subcommand")
 
 debug_view_messages = debug_subcommand.add_parser(
-                        "view", help="Show messages in file")
+                        "view", help="Show messages stored in an file that "
+                        "contains USB messages, either an PDML from wireshark "
+                        "or a recording from this tool with --record.")
 debug_view_messages.add_argument('file', type=str,
-                                 help='The file with usb interaction.')
+                                 help='The file with USB interaction.')
 debug_view_messages.set_defaults(func=run_debug_view_messages)
 
 
 debug_reconstruct_fs = debug_subcommand.add_parser(
                         "reconstruct",
-                        help="Reconstruct filesystem from interaction")
+                        help="Reconstruct filesystem from interaction.")
 debug_reconstruct_fs.add_argument('file',
                                   type=str,
                                   help='The file with transactions.')
@@ -353,7 +355,8 @@ debug_retrieve_fs.set_defaults(func=run_debug_dump_fs)
 
 debug_internallog = debug_subcommand.add_parser(
                         "internallog",
-                        help="print the internal log")
+                        help="Print the internal diagnostics log kept on the "
+                        "GPS, info such as time to fix, battery voltage, etc.")
 debug_internallog.set_defaults(func=run_debug_internallog)
 
 # debug_dev_func = debug_subcommand.add_parser("test")
