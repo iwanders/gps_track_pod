@@ -82,37 +82,6 @@ def run_device_status(args):
         print(communicator.read_msg().body)
 
 
-def run_debug_dev_func(args):
-    communicator = get_communicator(args)
-    gps = get_device(args, communicator)
-    # memfs = pmem.MEMfs(gps)
-    # file = pmem.BPMEMfile(memfs)
-    import struct
-    import ctypes
-    pos = 0x2000+2
-    # print(gps.data[pos:pos+2])
-    length, = struct.unpack("<H", gps.data[pos:pos+2])
-    print(length)
-    pos += 2
-
-    # TODO: Manage log wrap... how does this manifest itself?!
-    data = gps.data[pos:pos+length]
-    print(data)
-    print(" ".join(["{:0>2X}".format(b) for b in data]))
-    pos += length
-
-    a = protocol.BodySetLogSettingsRequest()
-    ctypes.memmove(ctypes.addressof(a)+8+4, bytes(data),
-                   min(len(data), ctypes.sizeof(a)))
-    # and 8+4 corresponds to the data position.
-    # the 8 is because of the position, length 
-    # the 4 field is because of the 03 entry type and 0x110 entry length.
-
-    # the 8+4 is also present in the write settings block.
-    print(a)
-    print(gps.get_settings())
-
-
 def run_show_tracks(args):
     communicator = get_communicator(args)
     gps = get_device(args, communicator)
@@ -123,33 +92,30 @@ def run_show_tracks(args):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
 
 
-def run_soundstate(args):
-    communicator = get_communicator(args)
-    with communicator:
-        request = protocol.ReadSettingsRequest()
-        communicator.write_msg(request)
-        msg = communicator.read_msg()
-        res = msg.body
-        print(res)
-        print(" ".join(["{:0>2X}".format(a) for a in bytes(msg)]))
-
-
 def run_set_sounds(args):
     request = protocol.SetSettingsRequest()
-    if (args.state in ["1", "true", "on"]):
-        request.sounds = True
-    elif (args.state in ["0", "false", "off"]):
-        request.sounds = False
-    else:
-        print("State should be 0/1, true/false, on/off")
-        sys.exit(1)
+    if (args.state != ""):
+        if (args.state in ["1", "true", "on"]):
+            request.sounds = True
+        elif (args.state in ["0", "false", "off"]):
+            request.sounds = False
+        else:
+            print("State should be 0/1, true/false, on/off")
+            sys.exit(1)
     communicator = get_communicator(args)
     with communicator:
-        communicator.write_msg(request)
-        if (type(communicator.read_msg()) == protocol.SetSettingsReply):
-            print("Succesfully set sound state.")
+        if (args.state != ""):
+            communicator.write_msg(request)
+            if (type(communicator.read_msg()) == protocol.SetSettingsReply):
+                print("Sound state should be: {}".format(args.state))
+            else:
+                print("Wrong response recevied, probably an USB error?")
         else:
-            print("Wrong response recevied, probably an USB error?")
+            request = protocol.ReadSettingsRequest()
+            communicator.write_msg(request)
+            msg = communicator.read_msg()
+            res = msg.body
+            print(res)
 
 
 def run_settings(args):
@@ -323,19 +289,18 @@ retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                              'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx')
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
-soundstate = subparsers.add_parser("soundstate",
-                                   help="Show current settings")
-soundstate.set_defaults(func=run_soundstate)
-
-set_sounds = subparsers.add_parser("sounds", help="Enable or disable sounds")
-set_sounds.add_argument('state', type=str,
-                        help='true or false...')
+set_sounds = subparsers.add_parser("sounds", help="Enable or disable sounds. "
+                                   "Call without arguments to show the current"
+                                   " sound state.")
+set_sounds.add_argument('state', type=str, default="", nargs="?",
+                        help='0/1, true/false, on/off...')
 set_sounds.set_defaults(func=run_set_sounds)
 
 
 settings = subparsers.add_parser("settings",
                                  help="Sets the logging parameters. "
-                                 "Without arguments sets to default settings.")
+                                 "Call without arguments to show the current"
+                                 " logging parameters.")
 settings.add_argument('--write', default=False, action="store_true",
                       help="Write settings instead of showing them.")
 settings.add_argument('--autolap', type=int, default=0,
@@ -388,8 +353,8 @@ debug_internallog = debug_subcommand.add_parser(
                         help="print the internal log")
 debug_internallog.set_defaults(func=run_debug_internallog)
 
-debug_dev_func = debug_subcommand.add_parser("test")
-debug_dev_func.set_defaults(func=run_debug_dev_func)
+# debug_dev_func = debug_subcommand.add_parser("test")
+# debug_dev_func.set_defaults(func=run_debug_dev_func)
 
 args = parser.parse_args()
 
