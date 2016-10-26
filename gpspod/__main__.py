@@ -257,13 +257,14 @@ def run_debug_internallog(args):
 
 # argument parsing
 parser = argparse.ArgumentParser(description="GPS Pod: Interact with ")
-parser.add_argument('--verbose', '-v', help="Print all communication.",
-                    action="store_true", default=False)
+
 parser.add_argument('--record', help="Record usb packets to aid debugging and\
-                    analysis.", default=True)
+                    analysis.", default=False)
+
 parser.add_argument('--recordfile', help="Default file to record to"
                     " (%%Y_%%m_%%d_%%H_%%M_%%S.json.gz)",
                     default=None)
+
 parser.add_argument('--playbackfile', help="Play transactions from this file",
                     default=None)
 
