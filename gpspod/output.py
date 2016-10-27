@@ -49,8 +49,7 @@ class GPSWriter:
                                            hour=self.metadata.hour,
                                            minute=self.metadata.minute,
                                            second=self.metadata.second)
-        # first run a for loop to consolidate the data, we take the periodic as
-        # dominant for the time, as it is more precise.
+
         self.entries = []
         current = {}
         self.time_reference = None
@@ -59,22 +58,30 @@ class GPSWriter:
         finished_log = False
         for entry in self.logentries:
             # print(type(entry))
+
+            # periodic holds data such as distance, speed and heading.
+            # the time of this field seems more precise.
             if (isinstance(entry, pmem.PeriodicStructure)):
                 current.update(dict(entry))
                 continue
+
+            # Holds the latitude and longitude.
             if (isinstance(entry, pmem.GpsUserData)):
                 current.update(dict(entry))
                 self.entries.append(current)
                 current = {}
                 continue
+
             if (isinstance(entry, pmem.TimeReference)):
                 self.time_reference = entry
                 continue
+
             if (isinstance(entry, pmem.DistanceSourceField)):
                 self.distance_source = entry
                 continue
+
             if (isinstance(entry, pmem.LogPauseField)):
-                # this is an empty message at the end.
+                # This is an empty message at the end of the track recording.
                 if (finished_log):
                     print("Found {} again! Should that ever happen?".format(
                           type(entry)))
@@ -230,8 +237,8 @@ class GPSWriter:
             gpsheading = ET.SubElement(extensions,
                                        "gpxdata:heading")
             # Spec describes degreesType: "Used for bearing, heading, course."
-            # But does not mention the tag names heading should have, is it
-            # out of the extensions in GPX 1.1?
+            # But does not mention the tag name heading should have, is it
+            # placed outside of the extensions in GPX 1.1?
             # Either way, have to convert it.
             heading = (seg["gpsheading"]["value"] / (2*pi)) * 360.0
             gpsheading.text = "{:.3f}".format(heading)

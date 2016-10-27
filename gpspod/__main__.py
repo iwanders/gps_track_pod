@@ -213,7 +213,7 @@ def run_retrieve_tracks(args):
         lap_split = not args.no_lap_splits_segment
         add_wpt = not args.no_lap_adds_wpt
         all_points = not args.no_write_points
-        print("Lap adds waypoint: {}, lap splits segments: {}, all points:"\
+        print("Lap adds waypoint: {}, lap splits segments: {}, all points:"
               " {}.".format(add_wpt, lap_split, all_points))
 
         logwriter = output.GPSWriter(samples, metadata=metadata,
@@ -270,15 +270,21 @@ def run_debug_internallog(args):
 
 # argument parsing
 parser = argparse.ArgumentParser(
-            description="GPS Pod: Interact with SUUNTO's GPS Track Pod."
-                                )
+    description="GPS Pod: Interact with SUUNTO's GPS Track Pod.",
+    epilog="If 'Resource Busy' or 'Permission Denied' errors occur, try a few"
+           " more times, these often occur when the device just starts usb "
+           "communication. Keep trying the 'info' command until these errors "
+           "do not appear anymore before performing other operations."
+    )
 
-parser.add_argument('--record', help="Record usb packets to aid debugging and\
-                    analysis.", default=False)
+parser.add_argument(
+    '--record', help="Record usb packets to aid debugging and analysis.",
+    default=False)
 
-parser.add_argument('--recordfile', help="Default file to record to"
-                    " (%%Y_%%m_%%d__%%H_%%M_%%S.json.gz).",
-                    default=None)
+parser.add_argument(
+    '--recordfile', help="Default file for communication recording"
+    " (%%Y_%%m_%%d__%%H_%%M_%%S.json.gz).",
+    default=None)
 
 parser.add_argument('--playbackfile', help="Play transactions from this file.",
                     default=None)
@@ -297,9 +303,11 @@ device_status.set_defaults(func=run_device_status)
 show_tracks = subparsers.add_parser("tracks", help="Show available tracks.")
 show_tracks.set_defaults(func=run_show_tracks)
 
-retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track.",
-                    epilog="A lap event is either caused by the autolap value"\
-                           " or by the user pressing the button once.")
+retrieve_tracks = subparsers.add_parser(
+    "retrieve", help="Retrieve a track.",
+    epilog="A lap event is either caused by the autolap value or by the user"
+           "pressing the button once.")
+
 retrieve_tracks.add_argument('index', type=int,
                              help='The index of the track to download.')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
@@ -342,8 +350,13 @@ settings.add_argument('--interval', type=int, default=1,
 settings.set_defaults(func=run_settings)
 
 retrieve_fs = subparsers.add_parser(
-                        "dump",
-                        help="Dump all bytes from the filesystem to a file.")
+                "dump",
+                help="Dump all bytes from the filesystem to a file.",
+                epilog="Using this command is the best way to ensure all data "
+                       "is stored; if some data is present in the log, but not"
+                       "converted to GPX it will always be stored in the FS"
+                       " dump. However, the data is not read easily, which is"
+                       "why this tool has the --fs flag to do that for you.")
 retrieve_fs.add_argument('file',
                          type=str,
                          help='The file to write to.')
