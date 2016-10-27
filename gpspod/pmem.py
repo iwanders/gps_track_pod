@@ -481,9 +481,15 @@ class DistanceSourceField(Uint8ByteIgnored255Field):
     key = "distancesource"
 
 
-class LapInfoField(FieldEntry):
-    _fields_ = [("field_", ctypes.c_uint16 * 23), ]
+class LapInfoField(DataStructure):
+    _fields_ = [("event_type", ctypes.c_uint8),
+                ("time", TimeBlock),
+                ("duration", DurationField),
+                ("distance", DistanceField),
+                ]
     key = "lapinfo"
+    _anonymous_ = ["time"]
+# event_type == 1 is manual (button is pressed)
 
 
 class GPSTestData(FieldEntry):

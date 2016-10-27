@@ -208,12 +208,25 @@ def run_retrieve_tracks(args):
         samples = track.get_entries()
         # for s in samples:
         #    print(s)
-        print("Acquired the data, writing gpx. ".format(len(samples)))
-        text = output.create_gpx_from_log(samples, metadata=metadata)
-        print("Done creating gpx, writing")
 
-        with open(output_path, "wt") as f:
+        print("Acquired the data, writing gpx.".format(len(samples)))
+        lap_split = not args.no_lap_splits_segment
+        add_wpt = not args.no_lap_adds_wpt
+        all_points = not args.no_write_points
+        print("Lap adds waypoint: {}, lap splits segments: {}, all points:"\
+              " {}.".format(add_wpt, lap_split, all_points))
+
+        logwriter = output.GPSWriter(samples, metadata=metadata,
+                                     lap_splits_segment=lap_split,
+                                     lap_adds_wpt=add_wpt,
+                                     write_points=all_points)
+        text = logwriter.create_xml()
+
+        with open(output_path, "wb") as f:
             f.write(text)
+
+        print("Done creating gpx, wrote {} bytes to {}.".format(len(text),
+              output_path))
 
 
 def run_dump_fs(args):
@@ -284,12 +297,24 @@ device_status.set_defaults(func=run_device_status)
 show_tracks = subparsers.add_parser("tracks", help="Show available tracks.")
 show_tracks.set_defaults(func=run_show_tracks)
 
-retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track.")
+retrieve_tracks = subparsers.add_parser("retrieve", help="Retrieve a track.",
+                    epilog="A lap event is either caused by the autolap value"\
+                           " or by the user pressing the button once.")
 retrieve_tracks.add_argument('index', type=int,
                              help='The index of the track to download.')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                              help='The output file for FS, defaults to: '
                              'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx.')
+retrieve_tracks.add_argument('--no-lap-splits-segment', default=False,
+                             action="store_true",
+                             help='Do not split the segments on a lap event.')
+retrieve_tracks.add_argument('--no-lap-adds-wpt', default=False,
+                             action="store_true",
+                             help='Do not add a wpt entry for a lap event.')
+retrieve_tracks.add_argument('--no-write-points', default=False,
+                             action="store_true",
+                             help='Do not write all points, only lap events.')
+
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
 set_sounds = subparsers.add_parser("sounds", help="Enable or disable sounds. "
