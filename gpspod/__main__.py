@@ -37,7 +37,7 @@ import os
 
 def get_communicator(args):
     if (args.recordfile is None):
-        recordpath = time.strftime("%Y_%m_%d_%H_%M_%S.json.gz")
+        recordpath = time.strftime("%Y_%m_%d__%H_%M_%S.json.gz")
     else:
         recordpath = args.recordfile
 
@@ -206,14 +206,24 @@ def run_retrieve_tracks(args):
 
         track.load_entries()
         samples = track.get_entries()
-        for s in samples:
-            print(s)
+        # for s in samples:
+        #    print(s)
         print("Acquired the data, writing gpx. ".format(len(samples)))
         text = output.create_gpx_from_log(samples, metadata=metadata)
         print("Done creating gpx, writing")
 
         with open(output_path, "wt") as f:
             f.write(text)
+
+
+def run_dump_fs(args):
+    communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    with communicator:
+        data = gps[0:pmem.FILESYSTEM_SIZE]
+
+    with open(args.file, "bw") as f:
+        f.write(data)
 
 
 def run_debug_reconstruct_fs(args):
@@ -232,16 +242,6 @@ def run_debug_reconstruct_fs(args):
 def run_debug_view_messages(args):
     from .debug import print_interaction
     print_interaction(args.file)
-
-
-def run_debug_dump_fs(args):
-    communicator = get_communicator(args)
-    gps = get_device(args, communicator)
-    with communicator:
-        data = gps[0:pmem.FILESYSTEM_SIZE]
-
-    with open(args.file, "bw") as f:
-        f.write(data)
 
 
 def run_debug_internallog(args):
@@ -316,6 +316,14 @@ settings.add_argument('--interval', type=int, default=1,
                       help='Set the logging interval 1s/60s (default: 1)')
 settings.set_defaults(func=run_settings)
 
+retrieve_fs = subparsers.add_parser(
+                        "dump",
+                        help="Dump all bytes from the filesystem to a file.")
+retrieve_fs.add_argument('file',
+                         type=str,
+                         help='The file to write to.')
+retrieve_fs.set_defaults(func=run_dump_fs)
+
 
 # create subparser for debug
 debug_command = subparsers.add_parser("debug", help="Various debug tools.")
@@ -342,16 +350,6 @@ debug_reconstruct_fs.add_argument(
                     help='The output file for FS, defaults to: '
                     'INPUTFILE.binfs')
 debug_reconstruct_fs.set_defaults(func=run_debug_reconstruct_fs)
-
-debug_retrieve_fs = debug_subcommand.add_parser(
-                        "dump",
-                        help="Dump all bytes from the filesystem to a file.")
-debug_retrieve_fs.add_argument('file',
-                               type=str,
-                               help='The file to write to.')
-debug_retrieve_fs.add_argument('--upto', type=int, default=0x3c0000,
-                               help="Retrieve up to this address (0x3c0000)")
-debug_retrieve_fs.set_defaults(func=run_debug_dump_fs)
 
 debug_internallog = debug_subcommand.add_parser(
                         "internallog",
