@@ -92,6 +92,40 @@ def run_show_tracks(args):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
 
 
+def run_set_time(args):
+    try:
+        current = datetime.datetime.now()
+        new = datetime.datetime(
+                year=args.year if args.year else current.year,
+                month=args.month if args.month else current.month,
+                day=args.day if args.day else current.day,
+                hour=args.hour if args.hour else current.hour,
+                minute=args.minute if args.minute else current.minute,
+                second=args.second if args.second else current.second)
+    except ValueError as e:
+        print("Error: {}, exiting".format(e))
+        sys.exit(1)
+    comm = get_communicator(args)
+    gps = get_device(args, comm)
+    # The vendor software sends first a SetDate message with the date
+    # Then it sends a SetTime message with all fields filled in...
+    request = protocol.SetTimeRequest()
+    request.date_time.year = new.year
+    request.date_time.month = new.month
+    request.date_time.day = new.day
+    request.date_time.hour = new.hour
+    request.date_time.minute = new.minute
+    request.date_time.ms = new.second*1000
+    time_str = new.strftime("%Y-%m-%d %H:%M:%S")
+    with comm:
+        comm.write_msg(request)
+        if (type(comm.read_msg()) != protocol.SetTimeReply):
+            print("Wrong response to set_time message.")
+            raise BaseError("Quitting, but with grace so the log is"
+                            "stored.")
+        print("Time should be set to {}.".format(time_str))
+
+
 def run_set_sounds(args):
     request = protocol.SetSettingsRequest()
     if (args.state != ""):
@@ -367,6 +401,25 @@ retrieve_fs.add_argument('file',
                          type=str,
                          help='The file to write to.')
 retrieve_fs.set_defaults(func=run_dump_fs)
+
+
+set_time = subparsers.add_parser("settime",
+                                 help="Set the local time in the device. "
+                                 "When arguments are missing the values the "
+                                 "local time is used.")
+set_time.add_argument('--year', default=None, type=int,
+                      help='The year to set.')
+set_time.add_argument('--month', default=None, type=int,
+                      help='The month to set.')
+set_time.add_argument('--day', default=None, type=int,
+                      help='The day to set.')
+set_time.add_argument('--hour', default=None, type=int,
+                      help='The hour to set.')
+set_time.add_argument('--minute', default=None, type=int,
+                      help='The minute to set.')
+set_time.add_argument('--second', default=None, type=int,
+                      help='The second to set.')
+set_time.set_defaults(func=run_set_time)
 
 
 # create subparser for debug
