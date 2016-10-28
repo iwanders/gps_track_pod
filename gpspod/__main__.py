@@ -221,7 +221,8 @@ def run_retrieve_tracks(args):
         logwriter = output.GPSWriter(samples, metadata=metadata,
                                      lap_splits_segment=lap_split,
                                      lap_adds_wpt=add_wpt,
-                                     write_points=all_points)
+                                     write_points=all_points,
+                                     time_local=args.local_time)
         text = logwriter.create_xml()
 
         with open(output_path, "wb") as f:
@@ -324,6 +325,9 @@ retrieve_tracks.add_argument('--no-lap-adds-wpt', default=False,
 retrieve_tracks.add_argument('--no-write-points', default=False,
                              action="store_true",
                              help='Do not write all points, only lap events.')
+retrieve_tracks.add_argument('--local-time', default=False,
+                             action="store_true",
+                             help='Use local time instead of UTC for points.')
 
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 

@@ -31,10 +31,11 @@ from math import pi
 
 class GPSWriter:
     def __init__(self, logentries, metadata, lap_splits_segment=True,
-                 lap_adds_wpt=True, write_points=True):
+                 lap_adds_wpt=True, write_points=True, time_local=False):
 
         self.logentries = logentries
         self.metadata = metadata
+        self.time_local = time_local
 
         self.lap_splits_segment = lap_splits_segment
         self.lap_adds_wpt = lap_adds_wpt
@@ -43,13 +44,6 @@ class GPSWriter:
         self.process_data()
 
     def process_data(self):
-        self.base_time = datetime.datetime(year=self.metadata.year,
-                                           month=self.metadata.month,
-                                           day=self.metadata.day,
-                                           hour=self.metadata.hour,
-                                           minute=self.metadata.minute,
-                                           second=self.metadata.second)
-
         self.entries = []
         current = {}
         self.time_reference = None
@@ -105,6 +99,26 @@ class GPSWriter:
             print("Unhandled type: {}".format(type(entry)))
             print("Unhandled data: {}".format(" ".join(["{:0>2X}".format(x)
                                               for x in bytes(entry)])))
+
+        if (self.time_local):
+            self.base_time = datetime.datetime(
+                year=self.metadata.year,
+                month=self.metadata.month,
+                day=self.metadata.day,
+                hour=self.metadata.hour,
+                minute=self.metadata.minute,
+                second=self.metadata.second)
+            self.time_suffix = ""
+        else:
+            time_spec = dict(self.time_reference)
+            self.base_time = datetime.datetime(
+                year=time_spec["UTC"]["year"],
+                month=time_spec["UTC"]["month"],
+                day=time_spec["UTC"]["day"],
+                hour=time_spec["UTC"]["hour"],
+                minute=time_spec["UTC"]["minute"],
+                second=time_spec["UTC"]["second"])
+            self.time_suffix = "Z"
 
     def create_xml(self):
         root = ET.Element("gpx")
@@ -188,7 +202,7 @@ class GPSWriter:
         sample_time = self.base_time + relative_time
 
         time_el = ET.SubElement(el, "time")
-        time_el.text = sample_time.isoformat() + "Z"
+        time_el.text = sample_time.isoformat() + self.time_suffix
 
         if "gpsaltitude" in seg:
             elevation = ET.SubElement(el, "ele")
