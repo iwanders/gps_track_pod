@@ -157,7 +157,11 @@ def print_interaction(path):
         usb_packet = USBPacket.read(data)
         res = dir_specific[direction]["feed"].packet(usb_packet)
         if (res):
+            # print(" ".join(["{:0>2X}".format(a) for a in bytes(res)]))
             message = load_msg(res)
+            if (not message):
+                print("Something is very wrong, message: {}".format(message))
+                continue
             print(dir_specific[direction]["color"].format(
                   "#{:0>5d}, t: {:0>6.3f} {:r}".format(packet_counter,
                                                        reltime, message)))

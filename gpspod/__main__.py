@@ -76,8 +76,8 @@ def run_device_info(args):
 
 def run_device_status(args):
     communicator = get_communicator(args)
+    request = protocol.DeviceStatusRequest()
     with communicator:
-        request = protocol.DeviceStatusRequest()
         communicator.write_msg(request)
         print(communicator.read_msg().body)
 
@@ -90,6 +90,33 @@ def run_show_tracks(args):
         tracklist = gps.get_tracks()
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
+
+
+def run_sgee(args):
+    if (args.file):
+        with open(args.file, "rb") as f:
+            data = f.read()
+        if (len(data) > 100000):
+            print("Data seems to be longer than 7 days which is what is sent "
+                  "by default, not sure whether this will work: Quitting for "
+                  "safety.")
+            sys.exit(1)
+
+    communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    with communicator:
+        if (args.file):
+            res = gps.write_sgee(data)
+            if (res):
+                print("Succes!")
+            else:
+                print("Something went wrong while writing the SGEE data.")
+        else:
+            request = protocol.ReadSGEEDateRequest()
+            communicator.write_msg(request)
+            res = communicator.read_msg()
+            # print(res)
+            print("SGEE time in device: {}.".format(res.body))
 
 
 def run_set_time(args):
@@ -316,7 +343,7 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument(
     '--record', help="Record usb packets to aid debugging and analysis.",
-    default=False)
+    default=False, action="store_true")
 
 parser.add_argument(
     '--recordfile', help="Default file for communication recording"
@@ -420,6 +447,12 @@ set_time.add_argument('--minute', default=None, type=int,
 set_time.add_argument('--second', default=None, type=int,
                       help='The second to set.')
 set_time.set_defaults(func=run_set_time)
+
+sgee = subparsers.add_parser("sgee",
+                             help="Upload SGEE data or show last upload time.")
+sgee.add_argument('file', default=None, type=str, nargs="?",
+                  help='The file with SGEE data to write to the device.')
+sgee.set_defaults(func=run_sgee)
 
 
 # create subparser for debug

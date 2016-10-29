@@ -163,6 +163,9 @@ class OfflineCommunicator(Communicator):
         super().__init__()
 
     def write_packet(self, packet):
+        if (self.outgoing_counter >= len(self.entries["outgoing"])):
+            print("Writing more packets than were recorded.")
+            return True
         d = self.entries["outgoing"][self.outgoing_counter]
         if (bytes(packet) != bytes(d[1])):
             print("Written data does not match recording")

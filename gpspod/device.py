@@ -26,45 +26,51 @@ from . import pmem
 from . import protocol
 import usb
 import time
+import struct
 
 
 class GpsPod:
-    def __init__(self, communicator):
+    def __init__(self, communicator, inter_packet_delay=0.01):
         self.fs = bytearray(pmem.FILESYSTEM_SIZE)
         self.retrieved_fs = bytearray(pmem.FILESYSTEM_SIZE)
         self.com = communicator
         self.memfs = None
         self.data = None
+        self.inter_packet_delay = inter_packet_delay
 
         self.tracks = []
         self.debug_logs = []
 
-    def transfer_block(self, block_index, retry_count=10):
-        p = protocol.DataRequest()
+    def communicate(self, msg, expected_reply, retry_count=10):
         error_count = 0
         while (error_count < retry_count):
             try:
-                p.pos(block_index * p.block_size)
-                self.com.write_msg(p)
+                self.com.write_msg(msg)
                 ret_packet = self.com.read_msg()
-                if (type(ret_packet) == protocol.DataReply):
-                        pos = ret_packet.position()
-                        length = ret_packet.length()
-                        self.fs[pos:pos+length] = ret_packet.content()
-                        ones = bytes([1 for i in range(length)])
-                        self.retrieved_fs[pos:pos+length] = bytes(ones)
-                        return True
+                if (type(ret_packet) == expected_reply):
+                    return ret_packet
                 else:
                     error_count += 1
-                    print("Will retry this block: {:>0X}"
-                          ", current_error count: {}".format(block_index,
-                                                             error_count))
-                time.sleep(0.01)
+                time.sleep(self.inter_packet_delay)
             except usb.core.USBError:
-                pass
-                time.sleep(0.01)
-        print("Failed retrieving block: {:>0X}".format(block_index))
+                time.sleep(self.inter_packet_delay)
         return False
+
+    def transfer_block(self, block_index):
+        p = protocol.DataRequest()
+        p.pos(block_index * p.block_size)
+        ret_packet = self.communicate(p, protocol.DataReply)
+        if (ret_packet):
+            # load the data
+            pos = ret_packet.position()
+            length = ret_packet.length()
+            self.fs[pos:pos+length] = ret_packet.content()
+            ones = bytes([1 for i in range(length)])
+            self.retrieved_fs[pos:pos+length] = bytes(ones)
+            return True
+        else:
+            print("Failed retrieving block: {:>0X}".format(block_index))
+            return False
 
     def have_data(self, key):
         if (sum(self.retrieved_fs[key]) == (key.stop - key.start)):
@@ -125,3 +131,48 @@ class GpsPod:
         settings_type = protocol.BodySetLogSettingsRequest
         setting = self.data[0x2000:0x2000 + settings_type.settings_true_size]
         return settings_type.load_settings(setting)
+
+    def get_sgee_timestamp(self):
+        request = protocol.ReadSGEEDateRequest()
+        res = self.communicate(request, protocol.ReadSGEEDateReply)
+        return res
+
+    def write_sgee(self, data):
+        # EE data in pmem starts at 0x704e0, but we do not really need that
+        # information. Just good to know.
+
+        current_timestamp = self.get_sgee_timestamp().body
+        # The endianness is different in the data, so we reorder the bytes.
+        # Also add a 0x01 byte at begin to match with the returned message.
+        databytes = bytes([1]) + data[7:5:-1] + bytes([data[8]]) + \
+            bytes([data[9]]) + data[13:9:-1]
+        sgeedate = protocol.BodySGEEDate.read(databytes)
+
+        if (databytes == bytes(current_timestamp)):
+            print("SGEE timestamp in device is already at {}.".format(
+                  sgeedate))
+            return True
+
+        print("Old SGEE timestamp was {}.".format(current_timestamp))
+        print("Writing SGEE data with timestamp {}.".format(sgeedate))
+
+        # At begin is length as uint32_t, NOT including the length field.
+        d = struct.pack("<I", len(data)) + data
+        chunk_size = 512  # maximum bytes per transaction.
+        chunked = [d[i:i + chunk_size] for i in range(0, len(d), chunk_size)]
+        index = 0
+        for block in chunked:
+            msg = protocol.WriteSGEEDataRequest()
+            msg.data_reply.position = chunk_size * index
+            msg.data_reply.length = len(block)
+            msg.load_payload(block)
+            ret_packet = self.communicate(msg, protocol.WriteSGEEDataReply)
+            if (not ret_packet):
+                return False
+            index += 1
+        # send unknown request delta.
+        msg = protocol.SetUnknownRequestDelta()
+        ret_packet = self.communicate(msg, protocol.SetUnknownReplyDelta)
+        if (not ret_packet):
+            return False
+        return True

@@ -392,6 +392,22 @@ class BodySetSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
         # + " ".join(["{:>02X}".format(a) for a in self.data])
 
 
+class BodySGEEDate(ctypes.LittleEndianStructure, Dictionary, Readable):
+    _pack_ = 1
+    _fields_ = [
+        ("entry_", ctypes.c_uint8),
+        ("year", ctypes.c_uint16),
+        ("month", ctypes.c_uint8),
+        ("day", ctypes.c_uint8),
+        ("seconds", ctypes.c_uint32),
+    ]
+
+    def __str__(self):
+        return "{}-{}-{}, {}".format(
+                self.year, self.month, self.day, self.seconds)
+        # + " ".join(["{:>02X}".format(a) for a in self.data])
+
+
 class BodySetLogSettingsRequest(ctypes.LittleEndianStructure, Dictionary):
     settings_true_size = (52 - 4 - 4 + 2 + 2 + 2 + 10 + 1 + 1 + 2)
     _pack_ = 1
@@ -454,6 +470,7 @@ class MessageBody_(ctypes.Union):
                 ("empty", BodyEmpty),
                 ("personal_settings", BodySetSettingsRequest),
                 ("set_settings_request", BodySetLogSettingsRequest),
+                ("sgee_date", BodySGEEDate),
                 ]
 
 
@@ -1005,7 +1022,7 @@ class ReadSGEEDateRequest(Message):
 class ReadSGEEDateReply(Message):
     command_id = 0x150B
     direction_id = 0x000a
-    body_field = "raw"
+    body_field = "sgee_date"
 # ------
 
 
@@ -1014,15 +1031,20 @@ class WriteSGEEDataRequest(Message):
     command_id = 0x120B
     direction_id = 0x0005
     # not empty! same structure as Data from EEPROM.
-    body_field = "empty"
+    body_field = "data_reply"
+
+    def load_payload(self, b):
+        self.body_length = len(b) + 8  # II from position, length
+        ctypes.memmove(ctypes.addressof(self.data_reply.data), bytes(b),
+                       len(b))
+        self.command.packet_length = self.body_length
 
 
 @register_msg
 class WriteSGEEDataReply(Message):
     command_id = 0x120B
     direction_id = 0x000a
-    # not empty! same structure as Data from EEPROM.
-    body_field = "raw"
+    body_field = "empty"
 # ------
 
 
@@ -1076,6 +1098,9 @@ class SetUnknownRequestDelta(Message):
         Occurs after SGEE sync, yes.. in all instances (3)?
 
         Perhaps to indicate that the SGEE data is synced?
+
+        Requesting SGEE timestamp without this yields 00's, even though the
+        filesystem dump shows that the data is in the correct location.
     """
     command_id = 0x140B
     direction_id = 0x0005
