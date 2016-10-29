@@ -260,10 +260,10 @@ def run_retrieve_tracks(args):
         else:
             output_path = args.outfile
 
-        print("Retrieving track {: >2d}, of {: >4d} samples and"
-              " writing to {}".format(args.index,
-                                      metadata.samples,
-                                      output_path))
+        print("Retrieving track {: >2d}, {: >4d} samples,"
+              " writing to {}.".format(args.index,
+                                       metadata.samples,
+                                       output_path))
         start_time = time.time()
         track.load_entries()
         samples = track.get_entries()
@@ -271,7 +271,7 @@ def run_retrieve_tracks(args):
         # for s in samples:
         #    print(s)
 
-        print("Acquired the data in {:.3f} seconds, writing gpx.".format(
+        print("Acquired the data in {:.2f} seconds, writing gpx.".format(
             end_time-start_time, len(samples)))
         lap_split = not args.no_lap_splits_segment
         add_wpt = not args.no_lap_adds_wpt
