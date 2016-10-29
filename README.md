@@ -55,14 +55,14 @@ Ambit, Movescount, Moveslink and Suunto are registered trademarks of Suunto Oy, 
 
 [suunto_pod]: http://www.suunto.com/en-GB/Products/PODs/Suunto-GPS-Track-POD/
 [openambit]: https://github.com/openambitproject/openambit/
-[udevrules]: blob/master/49-gpspod.rules
+[udevrules]: 49-gpspod.rules
 [pyusb]: https://walac.github.io/pyusb/
 [crcmod]: https://pypi.python.org/pypi/crcmod
-[requirements]: blob/master/requirements.txt
-[protocolpy]: blob/master/gpspod/protocol.py
-[pmempy]: blob/master/gpspod/pmem.py
-[interactpy]: blob/master/gpspod/interact.py
-[devicepy]: blob/master/gpspod/device.py
-[debugpy]: blob/master/gpspod/debug.py
-[mainpy]: blob/master/gpspod/__main__.py
-[outputpy]: blob/master/gpspod/output.py
+[requirements]: requirements.txt
+[protocolpy]: gpspod/protocol.py
+[pmempy]: gpspod/pmem.py
+[interactpy]: gpspod/interact.py
+[devicepy]: gpspod/device.py
+[debugpy]: gpspod/debug.py
+[mainpy]: gpspod/__main__.py
+[outputpy]: gpspod/output.py
