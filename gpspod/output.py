@@ -157,8 +157,18 @@ class GPSWriter:
                                                   second=lap["second"])
                     pretty_date = timestamp.strftime("%Y-%m-%d %H:%M:%S")
                     comment = "Button click at {}.".format(pretty_date)
+                elif lap["event_type"] == 0:
+                    added_extensions = {"gpxdata:event": "lap_auto"}
+                    name = "Automatic waypoint {}".format(i+1)
+                    timestamp = datetime.datetime(year=lap["year"],
+                                                  month=lap["month"],
+                                                  day=lap["day"],
+                                                  hour=lap["hour"],
+                                                  minute=lap["minute"],
+                                                  second=lap["second"])
+                    pretty_date = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    comment = "Autolap at {}.".format(pretty_date)
                 else:
-                    # TODO
                     added_extensions = {"gpxdata:event": "unknown"}
                     name = "unknown waypoint."
                     comment = "Not known why there is a lap here..?"
