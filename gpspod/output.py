@@ -181,11 +181,14 @@ class GPSWriter:
         name_el = ET.SubElement(trk, "name")
         name_el.text = self.base_time.strftime("Track %Y-%m-%d %H:%M:%S")
 
+        previous_segment = None
         if self.write_points:
             trkseg = ET.SubElement(trk, "trkseg")
             for seg in self.entries:
                 if (self.lap_splits_segment and "lap_indicator" in seg):
                     trkseg = ET.SubElement(trk, "trkseg")
+                    trkpt = ET.SubElement(trkseg, "trkpt")
+                    self.populate_element(trkpt, previous_segment)
                     continue
 
                 if ("latitude" not in seg) or ("longitude" not in seg) or (
@@ -193,6 +196,7 @@ class GPSWriter:
                     print("Skipping segment: {}".format(seg))
                     continue
 
+                previous_segment = seg
                 trkpt = ET.SubElement(trkseg, "trkpt")
                 self.populate_element(trkpt, seg)
 
