@@ -187,8 +187,9 @@ class GPSWriter:
             for seg in self.entries:
                 if (self.lap_splits_segment and "lap_indicator" in seg):
                     trkseg = ET.SubElement(trk, "trkseg")
-                    trkpt = ET.SubElement(trkseg, "trkpt")
-                    self.populate_element(trkpt, previous_segment)
+                    if (previous_segment):
+                        trkpt = ET.SubElement(trkseg, "trkpt")
+                        self.populate_element(trkpt, previous_segment)
                     continue
 
                 if ("latitude" not in seg) or ("longitude" not in seg) or (
