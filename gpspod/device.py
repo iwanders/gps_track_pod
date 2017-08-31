@@ -112,6 +112,116 @@ class GpsPod:
             if track.load_header():
                 self.tracks.append(track)
 
+    def recovered_track(self):
+        self.data.tracks.load_block_header()
+        self.data.tracks.load_logs()
+        for track in self.data.tracks.logs:
+            if track.load_header():
+                self.tracks.append(track)
+
+        # the relevant data is ALWAYS after the last existing track.
+        # we use this last track, we assume the recovered one is made using the
+        # same settings which is a valid assumption, since changing the config
+        # requires a USB connection, which means the tracks should've been
+        # retrieved.
+        rtrack = self.tracks[-1]  # recover track
+        print("Retrieving track prior to the recoverables.")
+        rtrack.get_header()
+        start_time = time.time()
+        track.load_entries()
+        samples = track.get_entries()
+        end_time = time.time()
+        print("Track prior retrieved in {:.1f}s, with {} entries".format(
+              end_time - start_time, len(samples)))
+        
+        empty_start = rtrack.pos  # recover from here.
+
+        # at first, we have to align position to samples. We do this by peeking
+        # at samples, checking if the values are sane, if they are not, we
+        # advance the look position by one.
+        # we look max 2**16 bytes ahead, this is the maximum length an entry
+        # can be.
+
+        def is_parsed_sane(parsed):
+            if (parsed == None):
+                return False
+            data = dict(parsed)
+            if "gpsheading" in data:
+                # heading < 2 * pi:
+                return abs(data["gpsheading"]["value"]) < 7
+            if "time" in data:
+                return data["time"]["value"] > 0.0
+            if "local" in data:
+                return data["local"]["month"] < 13
+            if (isinstance(parsed, pmem.DistanceSourceField)):
+                return True
+            # print(repr(parsed))
+            # print(data)
+            return False
+
+        # all GPS log entries are alternating 2 and 3 types, with 13 and 20
+        # as lengths respectively?
+        found_offset = False
+        print("Attempting to align to recoverable data.")
+        for offset in range(250, 1100):
+            len1, data1 = rtrack.peek_entry(empty_start + offset)
+            if (0 < len1 < 256):
+                # print(data1)
+                entry1 = rtrack.process_entry(data1)
+                # entry1 = ""
+                if is_parsed_sane(entry1):
+                    found_offset = True
+                    break
+
+            len2, data2 = rtrack.peek_entry(empty_start + len1 + offset + 2)
+            if (0 < len2 < 256):
+                # print(data2)
+                entry2 = ""
+                entry2 = rtrack.process_entry(data2)
+                # print(entry2)
+                if is_parsed_sane(entry2):
+                    found_offset = True
+                    break
+
+        if (not found_offset):
+            print("Failed to align with data, recovery failed.")
+            return None
+        else:
+            print("Succesfully aligned with data, offset: {}".format(offset))
+
+        # Now, it is time to start eating entries from the void.
+        rtrack.entries = []
+        rtrack.pos = empty_start + offset
+        rtrack.header_metadata.samples = 0
+        rtrack.retrieved_entry_count = 0
+        prior_size = len(rtrack.entries)
+        for i in range(0, 1000000):
+            # peek into this entry
+            peek_length, peek_data = rtrack.peek_entry(rtrack.pos)
+            #print("0x{:0>8X} l1: {: >8d}, data1[0]: {} ".format(rtrack.pos,
+            #      peek_length,
+            #      " ".join(["{:0>2X}".format(x) for x in peek_data])))
+            if (peek_length):
+                parsed = rtrack.process_entry(peek_data)
+            # determine if it is a valid gps entry.
+            if (is_parsed_sane(parsed) and peek_length):
+                # it is a valid entry, increase the number of samples that are
+                # known to be in this block
+                rtrack.header_metadata.samples += 1
+                # load all the entries, this loads up till retrieved_entry_count
+                # equals the header metadata samples.
+                rtrack.load_entries()
+                # print(str(rtrack.entries[-1]))
+            else:
+                print("This entry did not look sane, calling it a day!")
+                break
+
+        print("Retrieved {} entries.".format(rtrack.retrieved_entry_count))
+        if (rtrack.retrieved_entry_count != 0):
+            return rtrack
+        else:
+            return None
+
     def get_tracks(self):
         return self.tracks
 

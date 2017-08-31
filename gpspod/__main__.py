@@ -241,11 +241,20 @@ def run_retrieve_tracks(args):
         tracklist = gps.get_tracks()
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
-        if (abs(args.index >= len(tracklist))):
+
+        if (not args.recover) and (abs(args.index >= len(tracklist))):
             print("The track index is out of range.")
             print("Valid track range is: 0-{}".format(len(tracklist)-1))
             sys.exit(1)
-        track = tracklist[args.index]
+
+        if args.recover:
+            track = gps.recovered_track()
+            args.local_time = True
+            if (not track):
+                print("Could not recover anything.")
+                sys.exit(1)
+        else:
+            track = tracklist[args.index]
 
         metadata = track.get_header()
 
@@ -257,6 +266,8 @@ def run_retrieve_tracks(args):
                                       second=metadata.second)
         if (args.outfile is None):
             output_path = base_time.strftime("track_%Y_%m_%d__%H_%M_%S.gpx")
+            if (args.recover):
+                output_path = "recovered_" + output_path
         else:
             output_path = args.outfile
 
@@ -389,6 +400,14 @@ retrieve_tracks.add_argument('--no-write-points', default=False,
 retrieve_tracks.add_argument('--local-time', default=False,
                              action="store_true",
                              help='Use local time instead of UTC for points.')
+retrieve_tracks.add_argument('--recover', default=False,
+                             action="store_true",
+                             help="Attempt to recover GPS data that is NOT"
+                             " part of tracks current on the device. Can be"
+                             " used to recover partial tracks when the header"
+                             " has been overwritten. Run this on a dump! "
+                             " This implies local time (time of prior log is "
+                             " used, as such UTC time is not available")
 
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 

@@ -620,6 +620,7 @@ class PMEMBlock():
 
             if (log_header.next == pos):
                 pass
+
             self.logs.append(self.pmem_type(
                 self, pos+ctypes.sizeof(PMEMSubBlockHeader), log_header))
 
@@ -674,6 +675,15 @@ class PMEMEntriesBlock():
         data = self.block[self.pos:self.pos+length]
         self.pos += length
         return data
+
+    def peek_entry(self, pos):
+        # peek at the entry on position pos
+        length, = struct.unpack("<H", self.block[pos:pos+2])
+        if (length == 0):
+            return length, bytes([])
+        data = self.block[pos+2:pos+2+length]
+        return length, data
+        
 
     def parse(self, format, buffer, offset=0):
         res = list(struct.unpack_from(">"+format, buffer, offset))
