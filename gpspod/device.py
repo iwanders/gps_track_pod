@@ -143,45 +143,59 @@ class GpsPod:
         # can be.
 
         def is_parsed_sane(parsed):
+            """
+                This function can check if a parsed entry makes sense.
+            """
             if (parsed == None):
-                return False
+                return True
             data = dict(parsed)
             if "gpsheading" in data:
                 # heading < 2 * pi:
                 return abs(data["gpsheading"]["value"]) < 7
             if "time" in data:
-                return data["time"]["value"] > 0.0
+                return data["time"]["value"] >= 0.0
             if "local" in data:
                 return data["local"]["month"] < 13
             if (isinstance(parsed, pmem.DistanceSourceField)):
                 return True
-            # print(repr(parsed))
-            # print(data)
+            if (data == {}):
+                return True
             return False
 
-        # all GPS log entries are alternating 2 and 3 types, with 13 and 20
-        # as lengths respectively?
+        def check_packet_tail(rtrack, offset, to_check):
+            """
+                This tries to read to_check entries from rtrack at offset.
+                interprets the entries and determines if they are valid. It
+                calls itself until to_check is equal to zero, at which point it
+                returns True.
+                Basically this checks if there are to_check valid entries after
+                offset.
+            """
+            if (to_check == 0):
+                return True
+            len1, data1 = rtrack.peek_entry(offset)
+            # only bother if the type is < 256
+            if (0 <= len1 < 256):
+                try:
+                    entry1 = rtrack.process_entry(data1)
+                except struct.error as e:
+                    return False
+
+                if not is_parsed_sane(entry1):
+                    return False
+                # All good, check if the remainder of packets to be checked is
+                # good as well.
+                return check_packet_tail(rtrack, offset + len1 + 2, to_check - 1)
+            else:
+                return False
+
         found_offset = False
         print("Attempting to align to recoverable data.")
-        for offset in range(250, 1100):
-            len1, data1 = rtrack.peek_entry(empty_start + offset)
-            if (0 < len1 < 256):
-                # print(data1)
-                entry1 = rtrack.process_entry(data1)
-                # entry1 = ""
-                if is_parsed_sane(entry1):
-                    found_offset = True
-                    break
-
-            len2, data2 = rtrack.peek_entry(empty_start + len1 + offset + 2)
-            if (0 < len2 < 256):
-                # print(data2)
-                entry2 = ""
-                entry2 = rtrack.process_entry(data2)
-                # print(entry2)
-                if is_parsed_sane(entry2):
-                    found_offset = True
-                    break
+        for offset in range(0, 2**16):
+            # search for 10 valid consecutive packets
+            if (check_packet_tail(rtrack, empty_start + offset, 10)):
+                found_offset = True
+                break
 
         if (not found_offset):
             print("Failed to align with data, recovery failed.")
@@ -198,20 +212,23 @@ class GpsPod:
         for i in range(0, 1000000):
             # peek into this entry
             peek_length, peek_data = rtrack.peek_entry(rtrack.pos)
+
             #print("0x{:0>8X} l1: {: >8d}, data1[0]: {} ".format(rtrack.pos,
             #      peek_length,
             #      " ".join(["{:0>2X}".format(x) for x in peek_data])))
+
             if (peek_length):
                 parsed = rtrack.process_entry(peek_data)
+
             # determine if it is a valid gps entry.
             if (is_parsed_sane(parsed) and peek_length):
                 # it is a valid entry, increase the number of samples that are
                 # known to be in this block
                 rtrack.header_metadata.samples += 1
                 # load all the entries, this loads up till retrieved_entry_count
-                # equals the header metadata samples.
+                # equals the header metadata samples. Basically in this case
+                # it loads just one entry!
                 rtrack.load_entries()
-                # print(str(rtrack.entries[-1]))
             else:
                 print("This entry did not look sane, calling it a day!")
                 break
