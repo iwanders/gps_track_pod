@@ -89,6 +89,7 @@
 
 from .protocol import Readable, Dictionary
 import ctypes
+import inspect
 from collections import namedtuple
 import struct
 import math
@@ -697,22 +698,30 @@ class PMEMEntriesBlock():
 
 
 class PMEMTrackEntries(PMEMEntriesBlock):
-    header_metadata = None
-    periodic_entries = []
 
     def get_header(self):
         return self.header_metadata
 
     def load_header(self):
+        # self.periodic_structure = None
         # should contain the periodic specification
         self.header_samples = self.get_entry()
-        self.process_entry(self.header_samples)
+        first_spec = self.process_entry(self.header_samples)
+        if (first_spec and inspect.isclass(first_spec) and
+                issubclass(first_spec, PeriodicStructure)):
+            self.periodic_structure = first_spec
 
         # should contain all the metadata
         self.header_metadata_bytes = self.get_entry()
-        self.process_entry(self.header_metadata_bytes)
+        second_spec = self.process_entry(self.header_metadata_bytes)
+        if (second_spec and isinstance(second_spec, TrackHeader)):
+            self.header_metadata = second_spec
+
         if (self.header_metadata is None):
             return False
+
+        if (isinstance(second_spec, PeriodicStructure)):
+            self.periodic_structure = second_spec
 
         # No clue... \x03\x82\x00\x00\x00\x04
         self.header_unknown1 = self.get_entry()
@@ -731,6 +740,7 @@ class PMEMTrackEntries(PMEMEntriesBlock):
         # Defines the entries of the periodic type.
         if (entry_type == 0):
             pos = 0
+            periodic_entries = []
             periodic_count, pos = self.parse("H", entry_bytes, pos)
             # This probably CAN be a variable length array, it consists of:
             #: \x04\x00 # count
@@ -739,12 +749,11 @@ class PMEMTrackEntries(PMEMEntriesBlock):
             #: \x03\x00\x02\x00\x04\x00
             #: \x04\x00\x06\x00\x02\x00
             #: \x06\x00\x08\x00\x04\x00
-            self.periodic_entries = []
             field_list = []
             anonymous_fields = []
             for p in range(periodic_count):
                 type, offset, length, pos = self.parse("HHH", entry_bytes, pos)
-                self.periodic_entries.append((type, offset, length))
+                periodic_entries.append((type, offset, length))
                 if (type in sample_types):
                     fieldtype = sample_types[type]
                     field_list.append((fieldtype.key, fieldtype))
@@ -759,18 +768,21 @@ class PMEMTrackEntries(PMEMEntriesBlock):
                 _fields_ = field_list
                 # _anonymous_ = anonymous_fields
 
-            self.periodic_structure = SpecifiedPeriodicStructure
-            return None
+            return SpecifiedPeriodicStructure
 
         if (entry_type == 1):
-            self.header_metadata = TrackHeader.read(entry_bytes[pos:])
+            header_metadata = TrackHeader.read(entry_bytes[pos:])
+            return header_metadata
             # print("Found header: {}".format(self.header_metadata))
 
         # is periodic sample.
         if (entry_type == 2):
             samples = []
             # parse it according to the periodic entries.
-            return self.periodic_structure.read(entry_bytes[pos:])
+            if (self.periodic_structure):
+                return self.periodic_structure.read(entry_bytes[pos:])
+            else:
+                print("Should have periodic structure...")
 
         # Episodic type
         if (entry_type == 3):

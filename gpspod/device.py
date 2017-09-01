@@ -126,21 +126,15 @@ class GpsPod:
         # retrieved.
         rtrack = self.tracks[-1]  # recover track
         print("Retrieving track prior to the recoverables.")
-        rtrack.get_header()
+        print(rtrack.periodic_structure)
+        print(dict(rtrack.header_metadata))
         start_time = time.time()
         track.load_entries()
         samples = track.get_entries()
         end_time = time.time()
         print("Track prior retrieved in {:.1f}s, with {} entries".format(
               end_time - start_time, len(samples)))
-        
         empty_start = rtrack.pos  # recover from here.
-
-        # at first, we have to align position to samples. We do this by peeking
-        # at samples, checking if the values are sane, if they are not, we
-        # advance the look position by one.
-        # we look max 2**16 bytes ahead, this is the maximum length an entry
-        # can be.
 
         def is_parsed_sane(parsed):
             """
@@ -148,6 +142,10 @@ class GpsPod:
             """
             if (parsed == None):
                 return True
+
+            if (hasattr(parsed, "_fields_")):
+                return bool(parsed._fields_)
+
             data = dict(parsed)
             if "gpsheading" in data:
                 # heading < 2 * pi:
@@ -191,6 +189,11 @@ class GpsPod:
 
         found_offset = False
         print("Attempting to align to recoverable data.")
+        # At first, we have to align position to samples. We do this by peeking
+        # at samples, checking if the values are sane, if they are not, we
+        # advance the look position by one.
+        # We look max 2**16 bytes ahead, this is the maximum length an entry
+        # can be.
         for offset in range(0, 2**16):
             # search for 10 valid consecutive packets
             if (check_packet_tail(rtrack, empty_start + offset, 10)):
@@ -198,10 +201,11 @@ class GpsPod:
                 break
 
         if (not found_offset):
-            print("Failed to align with data, recovery failed.")
+            print("Failed to align with data, recovery failed :(")
             return None
         else:
-            print("Succesfully aligned with data, offset: {}".format(offset))
+            print("Successfully aligned with data, offset: 0x{:X}".format(
+                  offset))
 
         # Now, it is time to start eating entries from the void.
         rtrack.entries = []
@@ -209,16 +213,18 @@ class GpsPod:
         rtrack.header_metadata.samples = 0
         rtrack.retrieved_entry_count = 0
         prior_size = len(rtrack.entries)
+
         for i in range(0, 1000000):
             # peek into this entry
             peek_length, peek_data = rtrack.peek_entry(rtrack.pos)
-
             #print("0x{:0>8X} l1: {: >8d}, data1[0]: {} ".format(rtrack.pos,
             #      peek_length,
             #      " ".join(["{:0>2X}".format(x) for x in peek_data])))
 
             if (peek_length):
                 parsed = rtrack.process_entry(peek_data)
+            else:
+                continue
 
             # determine if it is a valid gps entry.
             if (is_parsed_sane(parsed) and peek_length):
