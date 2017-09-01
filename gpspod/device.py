@@ -126,14 +126,13 @@ class GpsPod:
         # retrieved.
         rtrack = self.tracks[-1]  # recover track
         print("Retrieving track prior to the recoverables.")
-        print(rtrack.periodic_structure)
-        print(dict(rtrack.header_metadata))
         start_time = time.time()
         track.load_entries()
         samples = track.get_entries()
         end_time = time.time()
         print("Track prior retrieved in {:.1f}s, with {} entries".format(
               end_time - start_time, len(samples)))
+
         empty_start = rtrack.pos  # recover from here.
 
         def is_parsed_sane(parsed):
@@ -214,6 +213,7 @@ class GpsPod:
         rtrack.retrieved_entry_count = 0
         prior_size = len(rtrack.entries)
 
+        print("Starting recovery process.")
         for i in range(0, 1000000):
             # peek into this entry
             peek_length, peek_data = rtrack.peek_entry(rtrack.pos)
@@ -236,11 +236,11 @@ class GpsPod:
                 # it loads just one entry!
                 rtrack.load_entries()
             else:
-                print("This entry did not look sane, calling it a day!")
+                print("This entry did not look sane, halting recovery.")
                 break
 
-        print("Retrieved {} entries.".format(rtrack.retrieved_entry_count))
         if (rtrack.retrieved_entry_count != 0):
+            print("Recovered {} entries.".format(rtrack.retrieved_entry_count))
             return rtrack
         else:
             return None

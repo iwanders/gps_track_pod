@@ -253,10 +253,20 @@ def run_retrieve_tracks(args):
             if (not track):
                 print("Could not recover anything.")
                 sys.exit(1)
+            else:
+                print("Succesfully recovered track! Resuming default process.")
         else:
             track = tracklist[args.index]
 
         metadata = track.get_header()
+
+        if args.override_time:
+            metadata.year = args.year
+            metadata.month = args.month
+            metadata.day = args.day
+            metadata.hour = args.hour
+            metadata.minute = args.minute
+            metadata.second = args.second
 
         base_time = datetime.datetime(year=metadata.year,
                                       month=metadata.month,
@@ -400,14 +410,40 @@ retrieve_tracks.add_argument('--no-write-points', default=False,
 retrieve_tracks.add_argument('--local-time', default=False,
                              action="store_true",
                              help='Use local time instead of UTC for points.')
-retrieve_tracks.add_argument('--recover', default=False,
-                             action="store_true",
-                             help="Attempt to recover GPS data that is NOT"
-                             " part of tracks current on the device. Can be"
-                             " used to recover partial tracks when the header"
-                             " has been overwritten. Run this on a dump! "
-                             " This implies local time (time of prior log is "
-                             " used, as such UTC time is not available")
+
+recover_help = """ Attempt to recover GPS data that is NOT part of tracks
+current on the device. Can be used to recover partial tracks when the header
+has been overwritten.
+
+Run this on a dump, this can perform up to 2**16 read requests on the memory.
+This implies local time, the UTC header is likely overwritten, otherwise it
+woudln't be necessary to use the recover instruction.
+
+The header of the last log is used for the periodic data. The raw GPS samples
+should be retrievable even when the periodic data has changed.
+
+Use this with --override-time to specify the start time of the log, the offsets
+are spread throughout the log.
+
+To recover a log made on the 27th and started at 09:00:
+python -m gpspod --fs dump_from_fs.bin retrieve
+    --recover 0 --override-time --day 27 --hour 9 --minute 00 --second 0
+
+When recovering, the 0 is a dummy and unused.
+"""
+retrieve_tracks.add_argument('--recover', default=False, action="store_true",
+                             help=recover_help)
+current_time = datetime.datetime.now()
+retrieve_tracks.add_argument('--year', default=current_time.year, type=int)
+retrieve_tracks.add_argument('--month', default=current_time.month, type=int)
+retrieve_tracks.add_argument('--day', default=current_time.day, type=int)
+retrieve_tracks.add_argument('--hour', default=current_time.hour, type=int)
+retrieve_tracks.add_argument('--minute', default=current_time.minute, type=int)
+retrieve_tracks.add_argument('--second', default=current_time.second, type=int)
+
+retrieve_tracks.add_argument('--override-time', default=False,
+                             action="store_true", help="Override the log start"
+                             " time by this date and time.")
 
 retrieve_tracks.set_defaults(func=run_retrieve_tracks)
 
