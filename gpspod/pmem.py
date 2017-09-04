@@ -662,6 +662,7 @@ class PMEMEntriesBlock():
     def __init__(self, block, pos, log_header):
         self.block = block
         self.start_pos = pos
+        self.orig_pos = pos
         self.pos = pos
         self.log_header = log_header
         self.entries = []
@@ -696,6 +697,8 @@ class PMEMEntriesBlock():
     def get_entries(self):
         return self.entries
 
+    def rewind(self):
+        self.pos = self.orig_pos
 
 class PMEMTrackEntries(PMEMEntriesBlock):
 
@@ -703,6 +706,7 @@ class PMEMTrackEntries(PMEMEntriesBlock):
         return self.header_metadata
 
     def load_header(self):
+        self.rewind()
         # self.periodic_structure = None
         # should contain the periodic specification
         self.header_samples = self.get_entry()

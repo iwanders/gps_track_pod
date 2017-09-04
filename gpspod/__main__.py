@@ -353,6 +353,55 @@ def run_debug_internallog(args):
             for m in log.get_entries():
                 print(m)
 
+def run_debug_df(args):
+    import ctypes
+    communicator = get_communicator(args)
+    gps = get_device(args, communicator)
+    with communicator:
+        gps = get_device(args, communicator)
+        track_block_size = gps.data.tracks.size
+        # track block has offset from the file, file has offset as well.
+        # lets just print some estimates.
+        data_offset = gps.data.offset
+        print("Tracks block size: {:0>8X}, offset: {:0>8X}".format(
+            track_block_size, gps.data.tracks.offset))
+        gps.load_tracks()
+        block_header = gps.data.tracks.header
+        print("Block header: {}".format(block_header))
+        tracklist = gps.get_tracks()
+        for i in range(len(tracklist)):
+            track = tracklist[i]
+            # track.get_header()
+            track_start = track.orig_pos
+            track.load_entries()
+            track_end = track.pos
+            track_size = track_end - track_start
+            print("Track {: >2d}: 0x{:0>8X} - 0x{:0>8X} : size; 0x{:0>6X}, "
+                  "{: >8d}b, {:2.2f}".format(i, track_start, track_end,
+                  track_size, track_size, track_size/track_block_size))
+
+            print("  Track {}".format(str(track.get_header())))
+            stats = {"sizes":{}}
+            last_with_time = None
+            for k in track.get_entries():
+                n = k.__class__.__name__
+                if (not n in stats):
+                    stats[n] = 0
+                    stats["sizes"][n] = ctypes.sizeof(k)
+                stats[n] += 1
+                x = dict(k)
+                if ("time" in x):
+                    last_with_time = x
+            for n in stats["sizes"]:
+                print("  {: <40s} ({: >4d}b): {: >5d}  total: {}b, "
+                      "{: >3.2f}".format(n,stats["sizes"][n], stats[n],
+                      stats[n] * stats["sizes"][n],
+                      stats[n] * stats["sizes"][n] / track_size))
+            if (last_with_time):
+                t = last_with_time["time"]["value"]
+                h = int(t / 3600)
+                m = int((t - 3600 * h) / 60)
+                print("  Log was: {:.1f}s ({}h{}m) long".format(t, h, m))
 # argument parsing
 parser = argparse.ArgumentParser(
     description="GPS Pod: Interact with SUUNTO's GPS Track Pod.",
@@ -541,6 +590,11 @@ debug_internallog = debug_subcommand.add_parser(
                         help="Print the internal diagnostics log kept on the "
                         "GPS, info such as time to fix, battery voltage, etc.")
 debug_internallog.set_defaults(func=run_debug_internallog)
+
+debug_df = debug_subcommand.add_parser("df",
+                    help="Some size metrics, run on DUMP")
+debug_df.set_defaults(func=run_debug_df)
+
 
 # debug_dev_func = debug_subcommand.add_parser("test")
 # debug_dev_func.set_defaults(func=run_debug_dev_func)
