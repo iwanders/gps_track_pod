@@ -24,8 +24,6 @@
 
 
 from . import protocol
-import usb
-import usb.util
 import sys
 import time
 
@@ -34,16 +32,41 @@ import json
 import gzip
 import base64
 
+class CommunicatorError(BaseException):
+    pass
 
-class Communicator():
-    write_endpoint = 0x02
-    read_endpoint = 0x82
+class BaseCommunicator(object):
+    # backend agnostic communicator.
     usb_packetlength = 64
-
     def __init__(self):
-        self.dev = None
         self.incoming = protocol.USBPacketFeed()
         self.sequence_number = 0
+
+    def write_msg(self, msg):
+        msg.command.packet_sequence = self.sequence_number
+        self.sequence_number += 1
+        # create the necessary USB packets and write these to the device.
+        packets = protocol.usbpacketizer(msg)
+        for p in packets:
+            self.write_packet(p)
+
+    def read_msg(self, timeout=1000):
+        start = time.time()
+        while (start + timeout / 1000.0) > time.time():
+            res = self.read_packet()
+            msg_res = self.incoming.packet(protocol.USBPacket.read(res))
+            if msg_res:
+                return protocol.load_msg(msg_res)
+        return None
+
+
+class CommunicatorPyUSB(BaseCommunicator):
+    write_endpoint = 0x02
+    read_endpoint = 0x82
+
+    def __init__(self):
+        super(Communicator, self).__init__()
+        self.dev = None
 
     def connect(self):
         # Bus 003 Device 008: ID 1493:0020 Suunto
@@ -70,8 +93,8 @@ class Communicator():
         res = True
         while(res):
             try:
-                res = self.dev.read(self.read_endpoint, self.usb_packetlength)
-            except usb.core.USBError:
+                res = self.read_packet()
+            except CommunicatorError:
                 break
 
     def close(self):
@@ -79,34 +102,20 @@ class Communicator():
         intf = cfg[(0, 0)]
         usb.util.release_interface(self.dev, intf)
 
-    def print_device(self):
-        cfg = self.dev.get_active_configuration()
-        intf = cfg[(0, 0)]
-
-    def write_msg(self, msg):
-        msg.command.packet_sequence = self.sequence_number
-        self.sequence_number += 1
-        # create the necessary USB packets and write these to the device.
-        packets = protocol.usbpacketizer(msg)
-        for p in packets:
-            self.write_packet(p)
-
-    def read_msg(self, timeout=1000):
-        start = time.time()
-        while (start + timeout / 1000.0) > time.time():
-            res = self.read_packet()
-            msg_res = self.incoming.packet(protocol.USBPacket.read(res))
-            if msg_res:
-                return protocol.load_msg(msg_res)
-        return None
-
     def write_packet(self, packet):
-        write_res = self.dev.write(self.write_endpoint, bytes(packet))
+        try:
+            write_res = self.dev.write(self.write_endpoint, bytes(packet))
+        except usb.core.USBError as e:
+            raise CommunicatorError(str(e))
         return write_res
 
     def read_packet(self):
-        res = self.dev.read(self.read_endpoint, self.usb_packetlength)
-        return res
+        try:
+            res = self.dev.read(self.read_endpoint, self.usb_packetlength)
+            return res
+        except usb.core.USBError as e:
+            raise CommunicatorError(str(e))
+        return None
 
     def __enter__(self):
         self.connect()
@@ -115,6 +124,88 @@ class Communicator():
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
 
+
+
+class CommunicatorHIDAPI(BaseCommunicator):
+
+    def __init__(self):
+        super(Communicator, self).__init__()
+        self.dev = None
+        self.read_buffer = bytearray([])
+
+    def connect(self):
+        self.dev = hid.device()
+        # Bus 003 Device 008: ID 1493:0020 Suunto
+        try:
+            self.dev.open(0x1493, 0x0020)
+            self.dev.set_nonblocking(1)
+        except OSError as e:
+            raise CommunicatorError(str(e))
+
+        # clean up any packets left in the delivery queue...
+        res = True
+        while(res):
+            try:
+                res = self.read_packet()
+            except (OSError, CommunicatorError) as e:
+                break
+
+    def close(self):
+        self.dev.close()
+
+    def write_packet(self, packet):
+        try:
+            write_res = self.dev.write(bytes(packet))
+        except OSError as e:
+            raise CommunicatorError(str(e))
+        return write_res
+
+    def read_packet(self, timeout=100):
+        # timeout is in ms
+        try:
+            start_time = time.time()
+            while ((len(self.read_buffer) <= self.usb_packetlength) and
+                    (start_time + timeout/1000.0 >= time.time())):
+                # read is not guaranteed to give the desired number of bytes?
+                res = self.dev.read(self.usb_packetlength)
+                self.read_buffer += bytearray(res)
+                time.sleep(0.0001)
+                if (len(self.read_buffer) >= self.usb_packetlength):
+                    packet = self.read_buffer[0:self.usb_packetlength]
+                    self.read_buffer = self.read_buffer[self.usb_packetlength:]
+                    return packet
+        except OSError as e:
+            raise CommunicatorError(str(e))
+
+        return None
+
+    def __enter__(self):
+        self.connect()
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+
+_found_hidapi = False
+try:
+    import hid
+    _found_hidapi = True
+    Communicator = CommunicatorHIDAPI
+except ImportError as e:
+    pass
+
+_found_pyusb = False
+try:        
+    import usb
+    import usb.util
+    _found_pyusb = True
+    Communicator = CommunicatorPyUSB
+except ImportError as e:
+    pass
+
+if ((not _found_hidapi) and (not _found_pyusb)):
+    print("Nothing found to write to the USB devices, local only.")
 
 class RecordingCommunicator(Communicator):
     def __init__(self, path=None):

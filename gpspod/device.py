@@ -24,7 +24,7 @@
 
 from . import pmem
 from . import protocol
-import usb
+from . import interact
 import time
 import struct
 
@@ -52,7 +52,7 @@ class GpsPod:
                 else:
                     error_count += 1
                 time.sleep(self.inter_packet_delay)
-            except usb.core.USBError:
+            except interact.CommunicatorError:
                 time.sleep(self.inter_packet_delay)
         return False
 

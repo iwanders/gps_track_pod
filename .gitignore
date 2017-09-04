@@ -1,5 +1,13 @@
 __pycache__
 venv
+venvhidapi
 *.json.gz
 *.binfs
 *.gpx
+*.pyc
+*.sh
+*.gz
+*.kmz
+*.png
+*.fs
+*.bin

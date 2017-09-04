@@ -129,7 +129,7 @@ def run_set_time(args):
                 hour=args.hour if args.hour else current.hour,
                 minute=args.minute if args.minute else current.minute,
                 second=args.second if args.second else current.second)
-    except ValueError as e:
+    except interact.CommunicatorError as e:
         print("Error: {}, exiting".format(e))
         sys.exit(1)
     comm = get_communicator(args)
