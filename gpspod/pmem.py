@@ -407,7 +407,7 @@ class TrackHeader(DataStructure):
     _anonymous_ = ["time"]
 
     def __str__(self):
-        return "{year}-{month}-{day} {hour:0>2}:{minute:0>2}:{second:0>2} "\
+        return "{year}-{month:0>2}-{day:0>2} {hour:0>2}:{minute:0>2}:{second:0>2} "\
             "distance: {distancevalue: >5}m, samples: {samples: >6},"\
             " interval:  {interval: >1}s".format(
                     distancevalue=self.distance.value, **dict(self))
