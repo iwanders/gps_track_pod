@@ -6,11 +6,11 @@ Although the hardware created by SUUNTO is very nice, the software has significa
 The efficient implementation in this client allows synchronizing tracks without copying all the data from the device. Moveslink spends about 6 minutes synchronizing all data, even if the only new track is just two minutes long. This client retrieves only the data necessary for that track (often taking less than 10 seconds). Other functionality, such as changing the settings is also provided.
 
 ## Usage
-The client has been developed and tested on Ubuntu 14.04, to be able to access the device without requiring root access, place the [49-gpspod.rules][udevrules] in `/etc/udev/rules.d/`. The client requires Python 3 and has two dependencies [pyusb][pyusb] and [crcmod][crcmod], a [requirements.txt][requirements] file is available for easy installation.
+The client has been developed and tested on Ubuntu 14.04, to be able to access the device without requiring root access, place the [49-gpspod.rules][udevrules] in `/etc/udev/rules.d/`. The client requires Python 3 and has two dependencies [crcmod][crcmod] and either [pyusb][pyusb] or [hidapi][hidapi], a requirements files are available for easy installation.
 
 To run the client one has to execute the module (so from a shell: `python3 -m gpspod`). I recommend making an alias for this, something like `alias gpspod='python3 -m gpspod`. Try `gpspod --help` for a list of available commands, they should be pretty self-explanatory.
 
-I noticed that it takes considerable time for the device to become available for communication after it has been connected to an USB port. `gpspod device`  can be used to retrieve the version number of the device, after connecting to USB the first few commands may result in 'Resource Busy' or 'Permission Denied' errors, try a few more times and it should become available.
+I noticed that it takes considerable time for the device to become available for communication after it has been connected to an USB port. `gpspod device`  can be used to retrieve the version number of the device, after connecting to USB the first few commands may result in 'Resource Busy', 'Permission Denied' or "Open Failed" errors, try a few more times and it should become available. The device goes inactive after being plugged in and not being communicated with for some time, so replugging may be necessary.
 
 Typically, the following steps are used:
 ```
@@ -39,12 +39,43 @@ The filesystem, BPMEM.dat file, blocks and log entry parsing can be tested on an
 
 The USB communication is contained to the [interact][interactpy] file. A special version of the communication class is available which records all communication and another one is available that facilitates replaying these recordings. Finally, the main entrypoint to the command-line tool is [\_\_main\_\_.py][mainpy]. Finally, the writer from [output][outputpy] is used to convert the data from the PMEM entries to a gpx file.
 
-
 ## Device
 This internal storage is a (valid) FAT16 filesystem, with one file called BPMEM.dat on it. In this file (0x3c0000 bytes) I identified two separate blocks (`PMEMBlock`), these blocks contain (multiple) sub blocks that hold entries (`PMEMEntriesBlock`) these hold actual data samples. One block (`PMEMLogEntries`) contains an internal log detailing anything from USB connections to GPS status and battery voltages. The other block is (`PMEMTrackEntries`) holds the samples that contain the GPS position and velocity and the like, this block contains the tracks.
 
 The `PMEMEntriesBlock`'s form a doubly linked list to each other, this means that after reading the start of the `PMEMBlock` we know where the first `PMEMEntriesBlock`, and after reading the start of that block we know where the next block of entries is located. This allows efficient retrieval of just the desired data.
 
+## Installation
+Two separate USB backends are supported, either `hidapi` or `pyusb`. Both are known to work on Ubuntu 14.04, on OS X the former must be used. Ubuntu 14.04 was tested with Python 3.4.3, OS X with Python 3.5.1.
+
+### Ubuntu 14.04 (Trusty)
+Requires `libusb-dev`, installation of `hidapi` requires updating setuptools. To build `hidapi` the dependencies `libusb-dev` and `libudev-dev` must be satisfied.
+
+Satisfy the dependencies by installing the necessary libraries:
+```bash
+sudo apt-get install libusb-dev libudev-dev
+```
+
+Then create the virtualenv, install the necessary modules and run the `gpspod` tool:
+```bash
+virtualenv --python=python3 venv # make the virtualenv
+source venv/bin/activate  # enable the virtualenv
+pip install -r requirements_hidapi.txt  # this takes a long time; it compiles hidapi.
+# pip install -r requirements_pyusb.txt # another option.
+python -m gpspod status
+```
+Rember the notes from the usage section.
+
+### OS X 10.10.2 (Yosemite)
+On OS X it is required to use `hidapi`, which plays nice with Apple's HID USB handling. No libraries are required, installing hidapi will take some time.
+
+```bash
+virtualenv --python=python3 venv # make the virtualenv
+source venv/bin/activate  # enable the virtualenv
+pip install -r requirements_hidapi.txt  # this takes a long time; it compiles hidapi.
+python -m gpspod status
+```
+
+Rember the notes from the usage section.
 
 ## License
 MIT License, see [LICENSE](LICENSE).
@@ -57,6 +88,7 @@ Ambit, Movescount, Moveslink and Suunto are registered trademarks of Suunto Oy, 
 [openambit]: https://github.com/openambitproject/openambit/
 [udevrules]: 49-gpspod.rules
 [pyusb]: https://walac.github.io/pyusb/
+[hidapi]: https://pypi.python.org/pypi/hidapi
 [crcmod]: https://pypi.python.org/pypi/crcmod
 [requirements]: requirements.txt
 [protocolpy]: gpspod/protocol.py
