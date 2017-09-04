@@ -160,7 +160,7 @@ class CommunicatorHIDAPI(BaseCommunicator):
             raise CommunicatorError(str(e))
         return write_res
 
-    def read_packet(self, timeout=100):
+    def read_packet(self, timeout=1000):
         # timeout is in ms
         try:
             start_time = time.time()
