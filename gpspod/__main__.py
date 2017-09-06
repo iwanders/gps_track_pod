@@ -353,6 +353,7 @@ def run_debug_internallog(args):
             for m in log.get_entries():
                 print(m)
 
+
 def run_debug_df(args):
     import ctypes
     communicator = get_communicator(args)
@@ -378,14 +379,16 @@ def run_debug_df(args):
             track_size = track_end - track_start
             print("Track {: >2d}: 0x{:0>8X} - 0x{:0>8X} : size; 0x{:0>6X}, "
                   "{: >8d}b, {:2.2f}".format(i, track_start, track_end,
-                  track_size, track_size, track_size/track_block_size))
+                                             track_size,
+                                             track_size,
+                                             track_size / track_block_size))
 
             print("  Track {}".format(str(track.get_header())))
-            stats = {"sizes":{}}
+            stats = {"sizes": {}}
             last_with_time = None
             for k in track.get_entries():
                 n = k.__class__.__name__
-                if (not n in stats):
+                if (n not in stats):
                     stats[n] = 0
                     stats["sizes"][n] = ctypes.sizeof(k)
                 stats[n] += 1
@@ -393,10 +396,26 @@ def run_debug_df(args):
                 if ("time" in x):
                     last_with_time = x
             for n in stats["sizes"]:
-                print("  {: <40s} ({: >4d}b): {: >5d}  total: {}b, "
-                      "{: >3.2f}".format(n,stats["sizes"][n], stats[n],
-                      stats[n] * stats["sizes"][n],
-                      stats[n] * stats["sizes"][n] / track_size))
+                field_size = stats["sizes"][n]
+                print("  {: <40s} ({: >4d}b): {: >5d}  total: {: >8d}b, "
+                      "{: >3.2f}".format(n, field_size, stats[n],
+                                         stats[n] * field_size,
+                                         stats[n] * field_size / track_size))
+            total_samples = sum([stats[n] for n in stats["sizes"]])
+            print("  {: <40s} ({: >4d}b): {: >5d}  total: {: >8d}b, "
+                  "{: >3.2f}".format("Entry length <H for all samples: ", 2,
+                                     total_samples, total_samples * 2,
+                                     total_samples * 2.0 / track_size))
+            print("  {: <40s} ({: >4d}b): {: >5d}  total: {: >8d}b, "
+                  "{: >3.2f}".format("Type <B for log samples: ", 1,
+                                     total_samples, total_samples * 1,
+                                     total_samples * 1.0 / track_size))
+            episodic_count = sum([stats[n] for n in stats["sizes"] if
+                                  n != "SpecifiedPeriodicStructure"])
+            print("  {: <40s} ({: >4d}b): {: >5d}  total: {: >8d}b, "
+                  "{: >3.2f}".format("I and B for episodic data: ", 5,
+                                     episodic_count, episodic_count * 5,
+                                     episodic_count * 5.0 / track_size))
             if (last_with_time):
                 t = last_with_time["time"]["value"]
                 h = int(t / 3600)
@@ -531,7 +550,7 @@ retrieve_fs = subparsers.add_parser(
 retrieve_fs.add_argument('file',
                          type=str, nargs="?",
                          help='The file to write to, this value defaults to '
-                         'gpspod_dump_%%Y_%%m_%%d__%%H_%%M_%%S.fs', 
+                         'gpspod_dump_%%Y_%%m_%%d__%%H_%%M_%%S.fs',
                          default=time.strftime("dump_%Y_%m_%d__%H_%M_%S.fs"))
 retrieve_fs.set_defaults(func=run_dump_fs)
 
@@ -594,7 +613,7 @@ debug_internallog = debug_subcommand.add_parser(
 debug_internallog.set_defaults(func=run_debug_internallog)
 
 debug_df = debug_subcommand.add_parser("df",
-                    help="Some size metrics, run on DUMP")
+                                       help="Some size metrics, run on dump.")
 debug_df.set_defaults(func=run_debug_df)
 
 
