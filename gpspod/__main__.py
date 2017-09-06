@@ -525,12 +525,14 @@ retrieve_fs = subparsers.add_parser(
                 help="Dump all bytes from the filesystem to a file.",
                 epilog="Using this command is the best way to ensure all data "
                        "is stored; if some data is present in the log, but not"
-                       "converted to GPX it will always be stored in the FS"
+                       " converted to GPX it will always be stored in the FS"
                        " dump. However, the data is not read easily, which is"
-                       "why this tool has the --fs flag to do that for you.")
+                       " why this tool has the --fs flag to do that for you.")
 retrieve_fs.add_argument('file',
-                         type=str,
-                         help='The file to write to.')
+                         type=str, nargs="?",
+                         help='The file to write to, this value defaults to '
+                         'gpspod_dump_%%Y_%%m_%%d__%%H_%%M_%%S.fs', 
+                         default=time.strftime("dump_%Y_%m_%d__%H_%M_%S.fs"))
 retrieve_fs.set_defaults(func=run_dump_fs)
 
 
