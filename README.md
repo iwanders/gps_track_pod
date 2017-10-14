@@ -30,6 +30,8 @@ Lap adds waypoint: True, lap splits segments: True, all points: True.
 Done creating gpx, wrote 489333 bytes to track_2016_10_26__20_11_06.gpx.
 ```
 
+Deleting tracks is not necessary,the older tracks automatically get overwritten by the one currently being created. See [issue #1](../../issues/1) for a detailed explanation.
+
 ## Development & Architecture
 For SUUNTO's watches, the [openambit][openambit] project provides an open-source alternative to Moveslink. However, this project does not support the GPS Pod. The [openambit][openambit] project provided me with a lot of information regarding the  communication protocol, hats off to them for their reverse-engineering work. There is a significant number of commands that is not shared with the ambit watches and the internal storage seems to be different as well.
 
