@@ -97,8 +97,11 @@ class GPSWriter:
                 continue
 
             print("Unhandled type: {}".format(type(entry)))
-            print("Unhandled data: {}".format(" ".join(["{:0>2X}".format(x)
-                                              for x in bytes(entry)])))
+            try:
+                print("Unhandled data: {}".format(" ".join(["{:0>2X}".format(x)
+                                                  for x in bytes(entry)])))
+            except BaseException as e:
+                print("Couldn't print bytes of {}: {}".format(entry, str(e)))
 
         if (self.time_local):
             self.base_time = datetime.datetime(
