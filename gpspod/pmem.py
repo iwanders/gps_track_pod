@@ -93,6 +93,7 @@ import inspect
 from collections import namedtuple
 import struct
 import math
+import traceback
 
 """
     So, we have a filesystem, with one file, which has an offset from the
@@ -800,7 +801,13 @@ class PMEMTrackEntries(PMEMEntriesBlock):
         if (self.header_metadata is not None):
             for i in range(self.header_metadata.samples -
                            self.retrieved_entry_count):
-                processed = self.process_entry(self.get_entry())
+                try:
+                    processed = self.process_entry(self.get_entry())
+                except struct.error as e:
+                    print("\nFAILED processing at sample {}: {}".format(
+                            i, str(e)))
+                    print(traceback.format_exc(), end="")
+                    print("Attempting to continue!\n")
                 if processed:
                     self.entries.append(processed)
 

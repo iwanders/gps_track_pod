@@ -292,8 +292,8 @@ def run_retrieve_tracks(args):
         # for s in samples:
         #    print(s)
 
-        print("Acquired the data in {:.2f} seconds, writing gpx.".format(
-            end_time-start_time, len(samples)))
+        print("Acquired {} samples data in {:.2f} seconds, writing gpx.".format(
+            len(samples), end_time-start_time))
         lap_split = not args.no_lap_splits_segment
         add_wpt = not args.no_lap_adds_wpt
         all_points = not args.no_write_points
