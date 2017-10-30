@@ -242,76 +242,84 @@ def run_retrieve_tracks(args):
         for i in range(len(tracklist)):
             print("{: >2d}: {}".format(i, tracklist[i].get_header()))
 
-        if (not args.recover) and (abs(args.index >= len(tracklist))):
+        if (not args.recover) and (args.index >= len(tracklist) and
+                                   (args.index != -1)):
             print("The track index is out of range.")
             print("Valid track range is: 0-{}".format(len(tracklist)-1))
             sys.exit(1)
 
+        if ((args.index == -1) and not args.recover):
+            print("Track index is -1, retrieval all tracks.")
+
         if args.recover:
-            track = gps.recovered_track()
+            tracks = [gps.recovered_track()]
             args.local_time = True
             if (not track):
                 print("Could not recover anything.")
                 sys.exit(1)
             else:
                 print("Succesfully recovered track! Resuming default process.")
+        if (args.index == -1):
+            tracks = tracklist
         else:
-            track = tracklist[args.index]
+            tracks = [tracklist[args.index]]
 
-        metadata = track.get_header()
+        for track_index, track in enumerate(tracks):
+            metadata = track.get_header()
 
-        if args.override_time:
-            metadata.year = args.year
-            metadata.month = args.month
-            metadata.day = args.day
-            metadata.hour = args.hour
-            metadata.minute = args.minute
-            metadata.second = args.second
+            if args.override_time:
+                metadata.year = args.year
+                metadata.month = args.month
+                metadata.day = args.day
+                metadata.hour = args.hour
+                metadata.minute = args.minute
+                metadata.second = args.second
 
-        base_time = datetime.datetime(year=metadata.year,
-                                      month=metadata.month,
-                                      day=metadata.day,
-                                      hour=metadata.hour,
-                                      minute=metadata.minute,
-                                      second=metadata.second)
-        if (args.outfile is None):
-            output_path = base_time.strftime("track_%Y_%m_%d__%H_%M_%S.gpx")
-            if (args.recover):
-                output_path = "recovered_" + output_path
-        else:
-            output_path = args.outfile
+            base_time = datetime.datetime(year=metadata.year,
+                                          month=metadata.month,
+                                          day=metadata.day,
+                                          hour=metadata.hour,
+                                          minute=metadata.minute,
+                                          second=metadata.second)
+            if (args.outfile is None):
+                output_path = base_time.strftime(
+                    "track_%Y_%m_%d__%H_%M_%S.gpx")
+                if (args.recover):
+                    output_path = "recovered_" + output_path
+            else:
+                output_path = args.outfile
 
-        print("Retrieving track {: >2d}, {: >4d} samples,"
-              " writing to {}.".format(args.index,
-                                       metadata.samples,
-                                       output_path))
-        start_time = time.time()
-        track.load_entries()
-        samples = track.get_entries()
-        end_time = time.time()
-        # for s in samples:
-        #    print(s)
+            print("Retrieving track {: >2d}, {: >4d} samples,"
+                  " writing to {}.".format(track_index,
+                                           metadata.samples,
+                                           output_path))
+            start_time = time.time()
+            track.load_entries()
+            samples = track.get_entries()
+            end_time = time.time()
+            # for s in samples:
+            #    print(s)
 
-        print("Acquired {} samples data in {:.2f} seconds, writing gpx.".format(
-            len(samples), end_time-start_time))
-        lap_split = not args.no_lap_splits_segment
-        add_wpt = not args.no_lap_adds_wpt
-        all_points = not args.no_write_points
-        print("Lap adds waypoint: {}, lap splits segments: {}, all points:"
-              " {}.".format(add_wpt, lap_split, all_points))
+            print("Acquired {} samples data in {:.2f} seconds, "
+                  "writing gpx.".format(len(samples), end_time-start_time))
+            lap_split = not args.no_lap_splits_segment
+            add_wpt = not args.no_lap_adds_wpt
+            all_points = not args.no_write_points
+            print("Lap adds waypoint: {}, lap splits segments: {}, all points:"
+                  " {}.".format(add_wpt, lap_split, all_points))
 
-        logwriter = output.GPSWriter(samples, metadata=metadata,
-                                     lap_splits_segment=lap_split,
-                                     lap_adds_wpt=add_wpt,
-                                     write_points=all_points,
-                                     time_local=args.local_time)
-        text = logwriter.create_xml()
+            logwriter = output.GPSWriter(samples, metadata=metadata,
+                                         lap_splits_segment=lap_split,
+                                         lap_adds_wpt=add_wpt,
+                                         write_points=all_points,
+                                         time_local=args.local_time)
+            text = logwriter.create_xml()
 
-        with open(output_path, "wb") as f:
-            f.write(text)
+            with open(output_path, "wb") as f:
+                f.write(text)
 
-        print("Done creating gpx, wrote {} bytes to {}.".format(len(text),
-              output_path))
+            print("Done creating gpx, wrote {} bytes to {}.".format(len(text),
+                  output_path))
 
 
 def run_dump_fs(args):
@@ -462,7 +470,8 @@ retrieve_tracks = subparsers.add_parser(
            "pressing the button once.")
 
 retrieve_tracks.add_argument('index', type=int,
-                             help='The index of the track to download.')
+                             help='The index of the track to download. You '
+                             'can specify -1 to retrieve all tracks.')
 retrieve_tracks.add_argument('outfile', type=str, default=None, nargs="?",
                              help='The output file for FS, defaults to: '
                              'track_%%Y_%%m_%%d__%%H_%%M_%%S.gpx.')
