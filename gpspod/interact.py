@@ -129,7 +129,7 @@ class CommunicatorPyUSB(BaseCommunicator):
 class CommunicatorHIDAPI(BaseCommunicator):
 
     def __init__(self):
-        super(Communicator, self).__init__()
+        super(CommunicatorHIDAPI, self).__init__()
         self.dev = None
         self.read_buffer = bytearray([])
 
@@ -207,7 +207,7 @@ except ImportError as e:
 if ((not _found_hidapi) and (not _found_pyusb)):
     print("Nothing found to write to the USB devices, local only.")
 
-class RecordingCommunicator(BaseCommunicator):
+class RecordingCommunicator(Communicator):
     def __init__(self, path=None):
         self.save_path = path
         self.incoming_packets = []
@@ -246,7 +246,7 @@ class RecordingCommunicator(BaseCommunicator):
         return super().__exit__(*args, **kwargs)
 
 
-class OfflineCommunicator(BaseCommunicator):
+class OfflineCommunicator(Communicator):
     def __init__(self, entries={"outgoing": [], "incoming": []}):
         self.entries = entries
         self.incoming_counter = 0
