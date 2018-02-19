@@ -65,7 +65,7 @@ class CommunicatorPyUSB(BaseCommunicator):
     read_endpoint = 0x82
 
     def __init__(self):
-        super(Communicator, self).__init__()
+        super(CommunicatorPyUSB, self).__init__()
         self.dev = None
 
     def connect(self):
@@ -129,7 +129,7 @@ class CommunicatorPyUSB(BaseCommunicator):
 class CommunicatorHIDAPI(BaseCommunicator):
 
     def __init__(self):
-        super(Communicator, self).__init__()
+        super(CommunicatorHIDAPI, self).__init__()
         self.dev = None
         self.read_buffer = bytearray([])
 
