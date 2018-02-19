@@ -83,11 +83,12 @@ class CommunicatorPyUSB(BaseCommunicator):
         for interface in self.dev.get_active_configuration():
             if self.dev.is_kernel_driver_active(interface.bInterfaceNumber):
                 self.dev.detach_kernel_driver(interface.bInterfaceNumber)
-                usb.util.claim_interface(self.dev, interface.bInterfaceNumber)
 
         # set the active configuration. With no arguments, the first
         # configuration will be the active one
         self.dev.set_configuration()
+        for interface in self.dev.get_active_configuration():
+            usb.util.claim_interface(self.dev, interface.bInterfaceNumber)
 
         # clean up any packets left in the delivery queue...
         res = True
