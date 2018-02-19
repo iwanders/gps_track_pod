@@ -1,2 +1,9 @@
+# Udev rules specific to Suunto's GPS track pod, usb, idVendor 0x1493, idProduct 0x0020.
+
+# Ensure modem manager doesn't try to enumerate this device.
+ATTRS{idVendor}=="1493", ATTRS{idProduct}=="0020", ENV{ID_MM_DEVICE_IGNORE}="1"
+# Ensure this device isn't probed for media transfer protocol.
+ATTRS{idVendor}=="1493", ATTRS{idProduct}=="0020", ENV{MTP_NO_PROBE}="1"
+# Ensure everyone can access the device.
 SUBSYSTEMS=="usb", ATTRS{idProduct}=="0020", ATTRS{idVendor}=="1493", MODE:="0666"
 
