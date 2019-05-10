@@ -288,11 +288,17 @@ def run_retrieve_tracks(args):
                     output_path = "recovered_" + output_path
             else:
                 output_path = args.outfile
+            if (args.index == -1):
+                print("Retrieving track {: >2d}, {: >4d} samples,"
+                      " writing to {}.".format(track_index,
+                                               metadata.samples,
+                                               output_path))
+            else:
+                print("Retrieving track {: >2d}, {: >4d} samples,"
+                      " writing to {}.".format(args.index,
+                                               metadata.samples,
+                                               output_path))
 
-            print("Retrieving track {: >2d}, {: >4d} samples,"
-                  " writing to {}.".format(track_index,
-                                           metadata.samples,
-                                           output_path))
             start_time = time.time()
             track.load_entries()
             samples = track.get_entries()
