@@ -476,7 +476,7 @@ read_sleep_duration_str, read_sleep_duration_val = retrieve_environment("GPSPOD_
 parser.add_argument('--read-sleep-duration',
                     help="Sleep for this duration after receiving usb packet exceeding a size. "
                          "(environ GPSPOD_READ_SLEEP_DURATION) [" + read_sleep_duration_str + "%(default)s ms]",
-                    default=0, type=float)
+                    default=read_sleep_duration_val, type=float)
 
 subparsers = parser.add_subparsers(dest="command")
 
