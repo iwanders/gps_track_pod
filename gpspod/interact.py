@@ -38,8 +38,11 @@ class CommunicatorError(BaseException):
 class BaseCommunicator(object):
     # backend agnostic communicator.
     usb_packetlength = 64
-    def __init__(self):
+    def __init__(self, read_timeout=1000, read_sleep_duration=0.1, read_sleep_minsize=float("inf")):
         self.incoming = protocol.USBPacketFeed()
+        self.read_timeout = read_timeout
+        self.read_sleep_duration = read_sleep_duration
+        self.read_sleep_minsize = read_sleep_minsize
         self.sequence_number = 0
 
     def write_msg(self, msg):
@@ -64,8 +67,8 @@ class CommunicatorPyUSB(BaseCommunicator):
     write_endpoint = 0x02
     read_endpoint = 0x82
 
-    def __init__(self):
-        super(CommunicatorPyUSB, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(CommunicatorPyUSB, self).__init__(*args, **kwargs)
         self.dev = None
 
     def connect(self):
@@ -112,7 +115,9 @@ class CommunicatorPyUSB(BaseCommunicator):
 
     def read_packet(self):
         try:
-            res = self.dev.read(self.read_endpoint, self.usb_packetlength)
+            res = self.dev.read(self.read_endpoint, self.usb_packetlength, timeout=int(self.read_timeout))
+            if (len(res) > self.read_sleep_minsize):
+                time.sleep(self.read_sleep_duration / 1000.0)
             return res
         except usb.core.USBError as e:
             raise CommunicatorError(str(e))
@@ -129,8 +134,8 @@ class CommunicatorPyUSB(BaseCommunicator):
 
 class CommunicatorHIDAPI(BaseCommunicator):
 
-    def __init__(self):
-        super(CommunicatorHIDAPI, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(CommunicatorHIDAPI, self).__init__(*args, **kwargs)
         self.dev = None
         self.read_buffer = bytearray([])
 
@@ -161,8 +166,9 @@ class CommunicatorHIDAPI(BaseCommunicator):
             raise CommunicatorError(str(e))
         return write_res
 
-    def read_packet(self, timeout=1000):
+    def read_packet(self):
         # timeout is in ms
+        timeout = self.read_timeout
         try:
             start_time = time.time()
             while ((len(self.read_buffer) <= self.usb_packetlength) and
@@ -170,7 +176,8 @@ class CommunicatorHIDAPI(BaseCommunicator):
                 # read is not guaranteed to give the desired number of bytes?
                 res = self.dev.read(self.usb_packetlength)
                 self.read_buffer += bytearray(res)
-                time.sleep(0.0001)
+                if (len(res) > self.read_sleep_minsize):
+                    time.sleep(self.read_sleep_duration / 1000.0)
                 if (len(self.read_buffer) >= self.usb_packetlength):
                     packet = self.read_buffer[0:self.usb_packetlength]
                     self.read_buffer = self.read_buffer[self.usb_packetlength:]
@@ -209,11 +216,11 @@ if ((not _found_hidapi) and (not _found_pyusb)):
     print("Nothing found to write to the USB devices, local only.")
 
 class RecordingCommunicator(Communicator):
-    def __init__(self, path=None):
+    def __init__(self, path=None, *args, **kwargs):
         self.save_path = path
         self.incoming_packets = []
         self.outgoing_packets = []
-        super().__init__()
+        super().__init__(*args, **kwargs)
 
     def write_packet(self, packet):
         self.outgoing_packets.append((time.time(), bytes(packet)))

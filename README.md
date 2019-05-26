@@ -32,6 +32,22 @@ Done creating gpx, wrote 489333 bytes to track_2016_10_26__20_11_06.gpx.
 
 Deleting tracks is not necessary,the older tracks automatically get overwritten by the one currently being created. See [issue #1](../../issues/1) for a detailed explanation.
 
+### USB Timeouts & Raspberry Pi
+USB timeouts may occur when PyUSB is used with a Raspberry Pi, see [!5][!5] for more details. This issue appears to be mitigated by sleeping after large USB transfers. The following parameters are available to configure timeout and sleep behaviour:
+
+ - The read timeout, on commandline as `--read-timeout`, or `GPSPOD_READ_TIMEOUT` as environment variable (milliseconds). This specifies the timeout of each individual `.read()` call made to the USB device. This option only applies to PyUSB.
+ - The minimum size after which to sleep, on commandline as `--read-sleep-minsize`, or `GPSPOD_READ_SLEEP_MINSIZE` as environment variable (bytes). This specifies how large the USB transfer must have been to incur the sleep duration after this, if the read length exceeds this min size the execution will sleep for the duration. This affects both USB backends.
+ - The duration to sleep after exceeding the size criteria, on commandline as `--read-sleep-duration`, or `GPSPOD_READ_SLEEP_DURATION` as environment variable (milliseconds). This specifies how long the execution will sleep after a read which size exceeded the `read-sleep-minsize` value.
+
+These options can be set with environment flags to make it easier to always set them. On a Raspberry pi the following parameters were found (see [!6][!6]) to work well:
+```
+export GPSPOD_READ_SLEEP_MINSIZE=10000
+export GPSPOD_READ_SLEEP_DURATION=1000
+```
+
+On computers with a normal USB stack it is unlikely that modification of any of these parameters is necessary for correct behaviour.
+
+
 ## Development & Architecture
 For SUUNTO's watches, the [openambit][openambit] project provides an open-source alternative to Moveslink. However, this project does not support the GPS Pod. The [openambit][openambit] project provided me with a lot of information regarding the  communication protocol, hats off to them for their reverse-engineering work. There is a significant number of commands that is not shared with the ambit watches and the internal storage seems to be different as well.
 
@@ -100,3 +116,5 @@ Ambit, Movescount, Moveslink and Suunto are registered trademarks of Suunto Oy, 
 [debugpy]: gpspod/debug.py
 [mainpy]: gpspod/__main__.py
 [outputpy]: gpspod/output.py
+[!5]: https://github.com/iwanders/gps_track_pod/issues/5
+[!6]: https://github.com/iwanders/gps_track_pod/pull/6

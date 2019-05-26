@@ -48,10 +48,12 @@ def get_communicator(args):
     if (args.fs is not None):
         return interact.OfflineCommunicator()
 
+    options = {"read_timeout": args.read_timeout, "read_sleep_minsize": args.read_sleep_minsize,
+               "read_sleep_duration": args.read_sleep_duration}
     if (args.record):
-        return interact.RecordingCommunicator(recordpath)
+        return interact.RecordingCommunicator(path=recordpath, **options)
     else:
-        return interact.Communicator()
+        return interact.Communicator(**options)
 
 
 def get_device(args, communicator):
@@ -451,6 +453,29 @@ parser.add_argument('--playbackfile', help="Play transactions from this file.",
 
 parser.add_argument('--fs', help="Specify a filesystem file to use.",
                     default=None)
+
+def retrieve_environment(key, vtype, default):
+    if os.environ.get(key):
+        value = vtype(os.environ.get(key))
+        return "{}=".format(key), value
+    else:
+        return "", vtype(default)
+
+read_timeout_str, read_timeout_val = retrieve_environment("GPSPOD_READ_TIMEOUT", float, 1000.0)
+parser.add_argument('--read-timeout', help="Timeout on raw USB byte reads. (environ GPSPOD_READ_TIMEOUT) [" +
+                    read_timeout_str + "%(default)s ms]", default=read_timeout_val, type=float)
+
+read_sleep_minsize_str, read_sleep_minsize_val = retrieve_environment("GPSPOD_READ_SLEEP_MINSIZE", float, float('inf'))
+parser.add_argument('--read-sleep-minsize',
+                    help="Sleep for a duration after receiving usb packet exceeding this size. "
+                         "(environ GPSPOD_READ_SLEEP_MINSIZE) [" + read_sleep_minsize_str + "%(default)s bytes]",
+                    default=read_sleep_minsize_val, type=float)
+
+read_sleep_duration_str, read_sleep_duration_val = retrieve_environment("GPSPOD_READ_SLEEP_DURATION", float, 0)
+parser.add_argument('--read-sleep-duration',
+                    help="Sleep for this duration after receiving usb packet exceeding a size. "
+                         "(environ GPSPOD_READ_SLEEP_DURATION) [" + read_sleep_duration_str + "%(default)s ms]",
+                    default=read_sleep_duration_val, type=float)
 
 subparsers = parser.add_subparsers(dest="command")
 
