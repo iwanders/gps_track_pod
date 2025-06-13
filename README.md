@@ -97,7 +97,7 @@ Rember the notes from the usage section.
 
 ## Hardware
 
-I'm no longer using these devices, I tore one down. The case was (probably ultrasonicly welded) hard to take apart. Battery was 3.7v/ 500mAh / 1,885 Wh Li-polymer battery KY00404858, KPL 652631, 081A12004.
+I'm no longer using these devices, I tore one down. The case was (probably ultrasonicly welded (`ABS+10%GP` on the inside)) hard to take apart. Battery was 3.7v/ 500mAh / 1,885 Wh Li-polymer battery KY00404858, KPL 652631, 081A12004.
 
 Sallient ICs, all under an RF shield, with the GPS, Unknown M781 and 24M01R6 together being in a subgroup of the RF shield.
 
