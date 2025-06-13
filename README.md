@@ -95,6 +95,83 @@ python -m gpspod status
 
 Rember the notes from the usage section.
 
+## Hardware
+
+I'm no longer using these devices, I tore one down. The case was (probably ultrasonicly welded) hard to take apart. Battery was 3.7v/ 500mAh / 1,885 Wh Li-polymer battery KY00404858, KPL 652631, 081A12004.
+
+Sallient ICs, all under an RF shield, with the GPS, Unknown M781 and 24M01R6 together being in a subgroup of the RF shield.
+
+GPS:
+```
+SIRF
+CSD4
+9312 D
+K2198821
+```
+Ceramic antenna on the other side of the board. Looks like a WCLSP package `24m01r6 ST` next to it? `M24M01-R` 1MBit serial?
+
+Unknown (in gps subshield) (Pins from dot, counter clockwise: 5, 0, 5, 0):
+```
+M781
+12 23
+```
+
+Outside of the GPS rf shield:
+
+Memory:
+```
+ATMEL
+45DB321D
+MU1227
+TAIWAN-P
+M29853
+```
+
+MCU:
+```
+M340F5632
+1BC45ZT O
+G1
+```
+
+Radio!
+```
+NRF N
+24AP2E
+1220AJ
+```
+
+Unknown (Pins from dot, counter clockwise: 5, 4, 5, 4):
+```
+27210
+13W
+Z45N
+```
+
+Unknown (Pins from dot, counter clockwise: 4, 4, 4, 4):
+```
+CDU
+?? 27l
+ASXV
+```
+
+Unknown (BGA, ?? pins):
+```
+2229
+C3H
+EDUBL
+```
+
+Unknown (Pins from dot, counter clockwise: 3, 0, 3, 0):
+```
+CEY
+28J
+PX4J
+```
+
+
+Lots of test points on the anteanna side. `RTC_XI` and `RTC_XO`, `1.8V`, `V_RF`, `ANT_32kHZ`, `TCK`, `TDI`, `VSYS`, `SYS_PEM_EN`.
+
 ## License
 MIT License, see [LICENSE](LICENSE).
 
